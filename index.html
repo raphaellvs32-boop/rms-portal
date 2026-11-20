@@ -1982,6 +1982,7 @@ function assinarDados(db, onR, onS){
   db.doc("config/locais").onSnapshot(d=>{ S.locais=d.exists?(d.data().lista||null):null; softRender(); }, ()=>{});
   db.doc("config/compradores").onSnapshot(d=>{ S.compradores=(d.exists&&d.data().lista)||[]; softRender(); }, ()=>{});
   if(db.supa) db.collection("travas").onSnapshot(snap=>{ const antes=S.openId?JSON.stringify(travaDe(S.openId)):""; const m={}; snap.docs.forEach(d=>m[d.id]=d.data()); S.travas=m; softRender(); if(S.openId && JSON.stringify(travaDe(S.openId))!==antes) renderDrawer(); }, ()=>{});
+  if(db.supa) db.collection("travas_quem").onSnapshot(snap=>{ const m={}; snap.docs.forEach(d=>m[d.id]=d.data()); S.travasQuem=m; softRender(); }, ()=>{});
 }
 const supaVoltar = () => location.origin+location.pathname;
 async function bootSupa(){
@@ -2320,8 +2321,11 @@ function tratamentoBox(r){
 const LOCK_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 const agoraSrv = () => Date.now()+(S.relogio||0);
 function travaDe(id){ const t=(S.travas||{})[id]; if(!t || !t.uid || t.uid===S.uid) return null; if(new Date(t.expira).getTime()<=agoraSrv()) return null; return t; }
-const travaChip = id => { const t=travaDe(id); return t?`<div class="lockchip" title="Em tratamento desde ${esc(fmtDT(t.desde))}">${LOCK_SVG}Em uso · ${esc(String(t.nome||t.email||"outro comprador").split(" ")[0])}</div>`:""; };
-const travaAviso = t => `<div class="tf-lock" role="status">${LOCK_SVG}<div><b>Em tratamento por ${esc(t.nome||t.email)}</b> desde ${esc(fmtDT(t.desde))}. Você pode consultar; as alterações ficam liberadas quando ${esc(String(t.nome||"").split(" ")[0]||"essa pessoa")} salvar ou fechar a RMS.</div></div>`;
+// nome de quem está tratando: só o Administrador vê (o banco só entrega "travas_quem" para ele) — nota 056
+const quemTrava = id => S.isAdmin ? ((S.travasQuem||{})[id]?.nome || null) : null;
+const quemTxt = id => quemTrava(id) || "outro comprador";
+const travaChip = id => { const t=travaDe(id); return t?`<div class="lockchip" title="Em tratamento por ${esc(quemTxt(id))} desde ${esc(fmtDT(t.desde))}">${LOCK_SVG}Em uso</div>`:""; };
+const travaAviso = (t,id) => `<div class="tf-lock" role="status">${LOCK_SVG}<div><b>Em tratamento por ${esc(quemTxt(id))}</b> desde ${esc(fmtDT(t.desde))}. Você pode consultar; as alterações ficam liberadas quando a RMS for salva ou fechada.</div></div>`;
 const travaUsa = () => S.supa && S.mode==="db" && S.canSup && !!S.sb?.rpc;
 async function travaRpc(fn,rid){ try{ const {data,error}=await S.sb.rpc(fn,{rid}); if(error) throw error; return data; }catch(e){ console.warn(fn,e); return undefined; } }
 async function travar(id){ const t=await travaRpc("rms_travar",id); if(!t) return false;
@@ -2344,7 +2348,7 @@ addEventListener("pagehide",()=>{ if(!S.minhaTrava || !S.sbToken) return;
   try{ fetch(RMS_SUPABASE.url+"/rest/v1/rpc/rms_liberar",{method:"POST",keepalive:true,headers:{apikey:RMS_SUPABASE.key,Authorization:"Bearer "+S.sbToken,"Content-Type":"application/json"},body:JSON.stringify({rid:S.minhaTrava})}); }catch{} });
 function tratFooter(r){
   const id=esc(r.id), sx=S.status[r.id]||{}, s=stOf(r.id), neg=isNeg(r.id);
-  { const tv=travaDe(r.id); if(tv) return `<div class="tfoot" id="tf-${id}" data-id="${id}">${travaAviso(tv)}</div>`; }
+  { const tv=travaDe(r.id); if(tv) return `<div class="tfoot" id="tf-${id}" data-id="${id}">${travaAviso(tv,r.id)}</div>`; }
   const steps=[["analise","Em análise"],["atendimento","Em compra"],["pedido","Pedido emitido"],["concluida","Entregue"]];
   return `<div class="tfoot" id="tf-${id}" data-id="${id}">
    <input type="hidden" id="st-${id}" value="">
@@ -2398,7 +2402,7 @@ document.addEventListener("change",ev=>{
 document.addEventListener("input",ev=>{ const m=(ev.target.id||"").match(/^rc-(.+)$/); if(m) tfUpdate(m[1]); });
 async function tratSalvar(id, t){
   const E=CSS.escape(id), r=S.rms.find(x=>x.id===id); if(!r) return;
-  { const tv=travaDe(id); if(tv){ toast(`RMS em tratamento por ${tv.nome||tv.email}. Aguarde a liberação.`); return; } }
+  { const tv=travaDe(id); if(tv){ toast(`RMS em tratamento por ${quemTxt(id)}. Aguarde a liberação.`); return; } }
   const cur=S.status[id]||{}, parts=[], extra={}, n=(r.itens||[]).length;
   const rc=$("#rc-"+E).value.trim(), dt=$("#dt-"+E).value, ap=$("#ap-"+E).value, pj=$("#pj-"+E).value;
   const {st,k,v}=tratPrev(id), ms=$("#ms-"+E), msg=(ms?.value||"").trim();
@@ -2575,7 +2579,7 @@ document.addEventListener("click",async ev=>{
   else if(a==="filter"){ S.filter=t.dataset.f; render(); }
   else if(a==="kfilter"){ S.filter=t.dataset.f; if(S.view==="painel"){ location.hash="#minhas"; } else render(); }
   else if(a==="dilf"){ S.dilFilter=t.dataset.f; render(); }
-  else if(a==="diledit"){ if(S.dilEdit!==t.dataset.id){ const tv=travaDe(t.dataset.id); if(tv){ toast(`RMS em tratamento por ${tv.nome||tv.email}.`); return; } } S.dilEdit = S.dilEdit===t.dataset.id ? null : t.dataset.id; if(!S.dilEdit&&S.pending){ S.pending=false; } render(); }
+  else if(a==="diledit"){ if(S.dilEdit!==t.dataset.id){ const tv=travaDe(t.dataset.id); if(tv){ toast(`RMS em tratamento por ${quemTxt(t.dataset.id)}.`); return; } } S.dilEdit = S.dilEdit===t.dataset.id ? null : t.dataset.id; if(!S.dilEdit&&S.pending){ S.pending=false; } render(); }
   else if(a==="indper"){ S.indPer=t.dataset.f; render(); }
   else if(a==="indgo"){ if(!S.canSup) return; S.dilFilter=t.dataset.f; location.hash="#dilig"; }
   else if(a==="dsort"){ const k=t.dataset.k, so=S.dilSort; S.dilSort = !so||so.k!==k ? {k,dir:1} : so.dir>0 ? {k,dir:-1} : null; render(); }
