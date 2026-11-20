@@ -46,6 +46,40 @@ nav.side{background:var(--surface);border-right:1px solid var(--line);padding:22
 .ini-t{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .tasks{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
 .task{border:1px solid var(--line);border-left-width:5px;border-radius:10px;background:var(--surface);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;font:inherit;color:var(--fg);cursor:pointer}
+/* Início em bento (nota 049) */
+.bento{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:18px}
+.tile{border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:18px 20px;display:flex;flex-direction:column;gap:8px;min-width:0;text-align:left;font:inherit;color:var(--fg)}
+button.tile{cursor:pointer;transition:border-color .25s cubic-bezier(.16,1,.3,1),transform .2s cubic-bezier(.16,1,.3,1)}
+button.tile:hover{border-color:#c5d0de} button.tile:active{transform:translateY(1px) scale(.99)}
+.tile.fila{grid-row:span 2} .tile.w2{grid-column:span 2} .tile.w3{grid-column:1 / -1}
+.tile h3{margin:0;font-size:14.5px;display:flex;align-items:center;gap:8px}
+.tile .lbl{font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.tile .big{font:600 40px/1 var(--mono);letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.tile .big.r{color:var(--bad)} .tile .big.y{color:var(--warn)}
+.tile small{color:var(--muted);font-size:12.5px}
+.livedot{position:relative;width:8px;height:8px;border-radius:50%;background:var(--cyan-dark);display:inline-block;flex:none}
+.livedot::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--cyan-dark);opacity:0;animation:liv 2.2s cubic-bezier(.16,1,.3,1) infinite}
+@keyframes liv{0%{transform:scale(.4);opacity:.8}100%{transform:scale(1.5);opacity:0}}
+.qrow{display:grid;grid-template-columns:84px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line);font-size:13.5px;cursor:pointer;border-radius:6px}
+.qrow:hover{background:var(--surface-2)} .qrow:last-child{border-bottom:0}
+.qrow b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qrow .num{font-size:12.5px}
+.bar3{display:flex;height:10px;border-radius:5px;overflow:hidden;gap:2px;background:var(--surface-2)}
+.bar3 i{display:block;min-width:0}
+.leg3{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--grafite)}
+.leg3 span{display:inline-flex;align-items:center;gap:6px} .leg3 i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.stream{overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+.stream-in{display:flex;gap:10px;width:max-content;animation:stm 45s linear infinite}
+.stream:hover .stream-in{animation-play-state:paused}
+@keyframes stm{to{transform:translateX(-50%)}}
+.ev{border:1px solid var(--line);border-radius:12px;padding:9px 13px;display:flex;flex-direction:column;gap:2px;max-width:280px;font-size:12.5px;background:var(--surface-2);cursor:pointer;text-align:left;font-family:inherit;color:var(--fg)}
+.ev b{font:600 12px var(--mono);color:var(--muted)} .ev span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mrow3{display:grid;grid-template-columns:1fr auto;gap:4px 10px;font-size:13px}
+.mrow3 b{font:600 15px var(--mono);text-align:right}
+.bento.anim>*{animation:bup .6s cubic-bezier(.16,1,.3,1) both;animation-delay:calc(var(--i,0) * 60ms)}
+@keyframes bup{from{opacity:.001;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (max-width:900px){ .bento{grid-template-columns:1fr} .tile.fila,.tile.w2,.tile.w3{grid-row:auto;grid-column:auto} }
+@media (prefers-reduced-motion: reduce){ .stream-in,.livedot::after,.bento.anim>*{animation:none} .stream{overflow-x:auto} }
 .task:hover{background:var(--surface-2)} .task b{display:block;font-size:14px} .task small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
 .task .n{font:600 26px var(--mono);font-variant-numeric:tabular-nums}
 .task.r{border-left-color:var(--bad)} .task.y{border-left-color:#e0a800} .task.b{border-left-color:var(--info)} .task.g{border-left-color:var(--accent)}
@@ -2085,39 +2119,65 @@ function trilha(r){
 }
 /* ---------- Início por perfil ---------- */
 function cardIni(cls,t,sub,n,h,k,f){ return `<button class="task ${cls}" data-act="ini" data-h="${h}" data-k="${k||""}" data-f="${f||""}"><span><b>${t}</b><small>${sub}</small></span><span class="n">${n}</span></button>`; }
+function iniFila(){
+  if(S.canSup){ const L=S.rms.filter(r=>stOf(r.id)==="analise"||emergAlmox(r)).sort((a,b)=>(prOf(a).ord-prOf(b).ord)||(diasSup(b)-diasSup(a)));
+    return {L, h:"#suprimentos", badge:r=>{ const d=diasSup(r), f=farolOf(r,d); return r.prioridade==="emergencial"?`<span class="prio ${prOf(r).cls}">${prOf(r).label}</span>`:`<span class="farol f-${f.k}" title="${esc(f.t)}"><i></i>${d} d</span>`; }}; }
+  const L=S.rms.filter(r=>stOf(r.id)==="almox").sort((a,b)=>(prOf(a).ord-prOf(b).ord)||(diasAlmox(b)-diasAlmox(a)));
+  return {L, h:"#almox", badge:r=>almoxFarol(r)};
+}
+function iniEventos(){
+  const ev=[]; S.rms.forEach(r=>{ if(!S.canSup && !r.almox) return; if(S.canSup||S.canAlmox) ((S.status[r.id]||{}).historico||[]).forEach(h=>ev.push({em:h.em,id:r.id,t:h.evento})); ev.push({em:r.criadoEm,id:r.id,t:"RMS emitida por "+(r.solicitante?.nome||"")}); });
+  return ev.filter(e=>e.em && !/recalculado|Importado da planilha/i.test(e.t||"")).sort((a,b)=>String(b.em).localeCompare(String(a.em))).slice(0,12);
+}
 function viewPainel(){
   const u=S.auth?.user, eu=mine(), mes=today().slice(0,7);
   const nome=(u?.nome||"").split(" ")[0];
-  let cards="", acoes="";
+  const dev=eu.filter(r=>stOf(r.id)==="revisao").length, ret=eu.filter(r=>stOf(r.id)==="estoque"||((S.status[r.id]||{}).almox?.itens||[]).some(x=>x.qe>0)&&!isFinal(r.id)).length;
+  const andam=eu.filter(r=>!isFinal(r.id)&&stOf(r.id)!=="revisao").length, entMes=eu.filter(r=>stOf(r.id)==="concluida"&&String((S.status[r.id]||{}).concluidoEm||"").slice(0,7)===mes).length;
+  const hoje=new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"});
+  const sauda=(()=>{ const h=new Date().getHours(); return h<12?"Bom dia":h<18?"Boa tarde":"Boa noite"; })();
+  if(!(S.canSup||S.canAlmox)) return viewMinhas();
+  const tile=(i,cls,lbl,n,sub,h,k,f,nc)=>`<button class="tile ${cls}" style="--i:${i}" data-act="ini" data-h="${h}" data-k="${k}" data-f="${f}"><span class="lbl">${lbl}</span><span class="big ${nc||""}">${n}</span><small>${sub}</small></button>`;
+  let t1="",t2="",t3="",t4="",bar="",acao="";
   if(S.canSup){
     const lim=spotLim(), spotV=spotAbertos(S.rms.filter(r=>!foraSup(r.id))).filter(r=>diasSup(r)>lim.amarelo).length;
     const venc=S.rms.filter(r=>!isNeg(r.id)&&!foraSup(r.id)&&vencida(r)).length, lib=S.rms.filter(r=>stOf(r.id)==="analise"&&(S.status[r.id]||{}).liberadoEm).length;
     const bloq=S.rms.filter(r=>!isFinal(r.id)&&!foraSup(r.id)&&(S.dilig[r.id]||{}).prBloqueada).length, ana=S.rms.filter(r=>stOf(r.id)==="analise"||emergAlmox(r)).length;
-    cards=cardIni("r","Spot em vermelho",`Acima de ${lim.amarelo} dias úteis desde a liberação`,spotV,"#suprimentos","sup","spot")
-      +cardIni("r","Remessas vencidas","Itens não entregues após a data",venc,"#dilig","dil","vencida")
-      +cardIni("y","Em análise",`${lib} liberada(s) pelo Almoxarifado`,ana,"#suprimentos","sup","analise")
-      +cardIni("b","PRs bloqueadas","Aguardando liberação",bloq,"#dilig","dil","bloq");
-    acoes=`<a class="btn primary" href="#suprimentos">Fila de compras</a><a class="btn" href="#dilig">Diligenciamento</a><a class="btn" href="#almox">Conferência de estoque</a>`;
-  } else if(S.canAlmox){
+    t1=tile(1,"","Em análise",ana,`${lib} liberada(s) pelo Almoxarifado`,"#suprimentos","sup","analise");
+    t2=tile(2,"","PRs bloqueadas",bloq,"Aguardando liberação","#dilig","dil","bloq",bloq?"r":"");
+    t3=tile(3,"","Spot em vermelho",spotV,`Acima de ${lim.amarelo} dias úteis desde a liberação`,"#suprimentos","sup","spot",spotV?"r":"");
+    t4=tile(4,"","Remessas vencidas",venc,"Itens não entregues após a data","#dilig","dil","vencida",venc?"y":"");
+    const A=S.rms.filter(r=>!isFinal(r.id)&&!foraSup(r.id)), c={verde:0,amarelo:0,vermelho:0}; A.forEach(r=>{ const k=farolOf(r).k; if(c[k]!=null) c[k]++; });
+    const T=c.verde+c.amarelo+c.vermelho||1;
+    bar=`<span class="lbl">Farol de prazo · ${A.length} RMS abertas em Suprimentos</span>
+      <div class="bar3" role="img" aria-label="${c.verde} no prazo, ${c.amarelo} em atenção, ${c.vermelho} atrasadas"><i style="width:${c.verde/T*100}%;background:#3d9a3d"></i><i style="width:${c.amarelo/T*100}%;background:#e0a800"></i><i style="width:${c.vermelho/T*100}%;background:var(--bad)"></i></div>
+      <div class="leg3"><span><i style="background:#3d9a3d"></i>${c.verde} até ${LEAD.verde} dias</span><span><i style="background:#e0a800"></i>${c.amarelo} de ${LEAD.verde+1} a ${LEAD.amarelo} dias</span><span><i style="background:var(--bad)"></i>${c.vermelho} acima de ${LEAD.amarelo} dias</span></div>`;
+    acao=`<a class="btn primary" href="#suprimentos">Abrir fila de compras</a>`;
+  } else {
     const A=S.rms.filter(r=>stOf(r.id)==="almox"), m=almoxMeta();
-    cards=cardIni("r","Atrasadas",`Acima da meta de ${m} dia(s) útil(eis)`,A.filter(r=>diasAlmox(r)>m).length,"#almox","alm","aguardando")
-      +cardIni("y","Emergenciais aguardando","Também visíveis para Suprimentos",A.filter(r=>r.prioridade==="emergencial").length,"#almox","alm","aguardando")
-      +cardIni("b","Aguardando conferência","Total na fila",A.length,"#almox","alm","aguardando")
-      +cardIni("g","Atendidas pelo estoque no mês","Sem gerar compra",S.rms.filter(r=>stOf(r.id)==="estoque"&&String((S.status[r.id]||{}).concluidoEm||"").slice(0,7)===mes).length,"#almox","alm","estoque");
-    acoes=`<a class="btn primary" href="#almox">Abrir conferência</a><a class="btn" href="#nova">+ Nova RMS</a>`;
+    const atr=A.filter(r=>diasAlmox(r)>m).length, hojeV=A.filter(r=>diasAlmox(r)===m).length;
+    t1=tile(1,"","Aguardando conferência",A.length,"Total na fila","#almox","alm","aguardando");
+    t2=tile(2,"","Atrasadas",atr,`Acima da meta de ${m} dia(s) útil(eis)`,"#almox","alm","aguardando",atr?"r":"");
+    t3=tile(3,"","Emergenciais",A.filter(r=>r.prioridade==="emergencial").length,"Também visíveis para Suprimentos","#almox","alm","aguardando");
+    t4=tile(4,"","Atendidas pelo estoque no mês",S.rms.filter(r=>stOf(r.id)==="estoque"&&String((S.status[r.id]||{}).concluidoEm||"").slice(0,7)===mes).length,"Sem gerar compra","#almox","alm","estoque");
+    const v=A.length-atr-hojeV, T=A.length||1;
+    bar=`<span class="lbl">Farol da conferência · meta ${m} dia(s) útil(eis)</span>
+      <div class="bar3" role="img" aria-label="${v} no prazo, ${hojeV} vencem hoje, ${atr} atrasadas"><i style="width:${v/T*100}%;background:#3d9a3d"></i><i style="width:${hojeV/T*100}%;background:#e0a800"></i><i style="width:${atr/T*100}%;background:var(--bad)"></i></div>
+      <div class="leg3"><span><i style="background:#3d9a3d"></i>${v} no prazo</span><span><i style="background:#e0a800"></i>${hojeV} vencem hoje</span><span><i style="background:var(--bad)"></i>${atr} atrasadas</span></div>`;
+    acao=`<a class="btn primary" href="#almox">Abrir conferência</a>`;
   }
-  const dev=eu.filter(r=>stOf(r.id)==="revisao").length, ret=eu.filter(r=>stOf(r.id)==="estoque"||((S.status[r.id]||{}).almox?.itens||[]).some(x=>x.qe>0)&&!isFinal(r.id)).length;
-  const andam=eu.filter(r=>!isFinal(r.id)&&stOf(r.id)!=="revisao").length, entMes=eu.filter(r=>stOf(r.id)==="concluida"&&String((S.status[r.id]||{}).concluidoEm||"").slice(0,7)===mes).length;
-  const meus=cardIni("r","Devolvidas para ajuste","Almoxarifado ou Suprimentos pediu correção",dev,"#minhas","min","acao")
-    +cardIni("g","Prontas para retirar","Itens atendidos pelo estoque",ret,"#minhas","min","fim")
-    +cardIni("b","Em andamento","No Almoxarifado ou em compra",andam,"#minhas","min","and")
-    +cardIni("","Entregues no mês","Todos os itens entregues",entMes,"#minhas","min","fim");
-  const recent=sorted(S.canSup?S.rms:eu).slice(0,8);
-  return `<div class="head"><div><h2>Início</h2><p>${nome?`Olá, ${esc(nome)}. `:""}${S.canSup?"Pendências de Suprimentos agora.":S.canAlmox?"Pendências do Almoxarifado agora.":"Acompanhe o que depende de você."}</p></div><a class="btn primary" href="#nova">+ Nova RMS</a></div>
-   ${cards?`<section class="ini"><h3 class="ini-t">${S.canSup?"Suprimentos":"Almoxarifado"} · o que precisa de você agora</h3><div class="tasks">${cards}</div><div class="qa">${acoes}</div></section>`:""}
-   <section class="ini"><h3 class="ini-t">Minhas RMS</h3><div class="tasks">${meus}</div></section>
-   <section class="panel"><header><h3>${S.canSup?"Últimas solicitações":"Minhas últimas RMS"}</h3>${farolLegenda()}<a class="btn small" href="${S.canSup?"#todas":"#minhas"}">Ver todas</a></header>
-     ${loadingOr(rowsTable(recent,{empty:S.canSup?"Nenhuma solicitação registrada ainda.":"Você ainda não emitiu nenhuma RMS."}))}</section>
+  const F=iniFila(), top=F.L.slice(0,7);
+  const fila=`<div class="tile fila" style="--i:0"><h3><span class="livedot" aria-hidden="true"></span>Fila agora, por urgência <span class="sub" style="margin:0 0 0 auto;font-weight:400">${F.L.length} na fila</span></h3>
+    ${!top.length?`<div class="empty" style="padding:24px 8px">Fila zerada. Nada aguardando ${S.canSup?"Suprimentos":"o Almoxarifado"} agora.</div>`:
+    `<div>${top.map(r=>`<div class="qrow" data-act="iniopen" data-h="${F.h}" data-id="${esc(r.id)}" tabindex="0" role="button" aria-label="Abrir RMS ${esc(fmtNum(r.id))}"><span class="num">${esc(fmtNum(r.id))}</span><b>${esc((r.itens||[])[0]?.descricao||"—")}${(r.itens||[]).length>1?` <span class="sub" style="display:inline;margin:0;font-weight:400">+${(r.itens||[]).length-1}</span>`:""}</b><span>${F.badge(r)}</span></div>`).join("")}</div>`}
+    <small style="margin-top:auto">Emergenciais primeiro, depois as mais antigas. Clique para tratar.${F.L.length>top.length?` <a href="${F.h}">Ver as ${F.L.length}</a>`:""}</small></div>`;
+  const minhas=`<button class="tile" style="--i:6" data-act="ini" data-h="#minhas" data-k="min" data-f="${dev?"acao":"and"}"><span class="lbl">Minhas RMS</span>
+    <span class="mrow3"><span>Devolvidas para ajuste</span><b style="${dev?"color:var(--bad)":""}">${dev}</b><span>Prontas para retirar</span><b>${ret}</b><span>Em andamento</span><b>${andam}</b><span>Entregues no mês</span><b>${entMes}</b></span></button>`;
+  const E=iniEventos(), evh=E.map(e=>`<button class="ev" data-act="iniopen" data-h="${S.canSup?"#suprimentos":"#almox"}" data-id="${esc(e.id)}" title="${esc(e.t)}"><b>${esc(fmtDT(e.em))} · ${esc(fmtNum(e.id))}</b><span>${esc(e.t)}</span></button>`).join("");
+  const stream=E.length?`<div class="tile w3" style="--i:7"><span class="lbl">Acabou de acontecer</span><div class="stream"><div class="stream-in">${evh}${E.length>3?`<span aria-hidden="true" style="display:contents">${evh}</span>`:""}</div></div></div>`:"";
+  const anim=!S.iniAnim; S.iniAnim=true;
+  return `<div class="head"><div><h2>${sauda}${nome?`, ${esc(nome)}`:""}.</h2><p style="text-transform:none">${esc(hoje.charAt(0).toUpperCase()+hoje.slice(1))} · ${S.canSup?"o que precisa de Suprimentos agora":"o que precisa do Almoxarifado agora"}</p></div><div style="display:flex;gap:8px;flex-wrap:wrap">${acao}<a class="btn" href="#nova">+ Nova RMS</a></div></div>
+   ${loadingOr(`<div class="bento ${anim?"anim":""}">${fila}${t1}${t2}${t3}${t4}<div class="tile w2" style="--i:5">${bar}</div>${minhas}${stream}</div>`)}
    ${S.mode==="local"?`<div class="note warn">Modo local: os registros ficam somente neste navegador. Abra o portal pelo link publicado no claude.ai para usar a base compartilhada da equipe.</div>`:""}`;
 }
 
@@ -2579,6 +2639,7 @@ document.addEventListener("click",async ev=>{
   else if(a==="colall"){ delete S.supCol[S.colOpen]; render(); }
   else if(a==="colnone"){ S.supCol[S.colOpen]={set:[]}; render(); }
   else if(a==="colclose"){ S.colOpen=null; S.colQ=""; render(); }
+  else if(a==="iniopen"){ const id=t.dataset.id, h=t.dataset.h; if(location.hash!==h) location.hash=h; setTimeout(()=>{ S.openId=id; renderDrawer(); },60); }
   else if(a==="ini"){ const k=t.dataset.k, f=t.dataset.f; if(k==="sup") S.supFilter=f; else if(k==="dil") S.dilFilter=f; else if(k==="alm") S.almTab=f; else if(k==="min"){ S.minF=f; S.q=""; }
     if(location.hash===t.dataset.h) render(); else location.hash=t.dataset.h; }
   else if(a==="anok"){ if(t.classList.contains("overlay")&&ev.target!==t) return; await marcarVistas(almoxNotifs().map(x=>x.id)); renderAlmNotif(); renderSupNotif(); }
@@ -2633,6 +2694,7 @@ document.addEventListener("keydown",ev=>{
   if(ev.key==="Escape" && $("#notifRoot").innerHTML){ marcarVistas(minhasNotif().map(n=>n.id)).then(renderNotif); return; }
   if(ev.key==="Escape" && S.openId){ S.openId=null; renderDrawer(); } else if(ev.key==="Escape" && S.dilEdit){ S.dilEdit=null; render(); }
   if(ev.key==="Enter" && ev.target.matches("tr[data-act=open]")){ S.openId=ev.target.dataset.id; renderDrawer(); }
+  else if(ev.key==="Enter" && ev.target.matches(".qrow[data-act=iniopen]")) ev.target.click();
 });
 document.addEventListener("submit",ev=>{ if(ev.target.id==="frm"){ ev.preventDefault(); submit(); } });
 document.addEventListener("input",ev=>{ if(ev.target.classList?.contains("err") && String(ev.target.value).trim()) ev.target.classList.remove("err"); if(ev.target.id==="dilQ"){ S.dilQ=ev.target.value; const pos=ev.target.selectionStart; render(); const q=$("#dilQ"); q.focus(); q.setSelectionRange(pos,pos); return; } if(ev.target.id==="q"){ S.q=ev.target.value; const pos=ev.target.selectionStart; render(); const q=$("#q"); q.focus(); q.setSelectionRange(pos,pos); } });
