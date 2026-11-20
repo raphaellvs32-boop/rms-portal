@@ -2334,13 +2334,14 @@ async function tratSalvar(id, t){
     extra.revisao={msg,em}; extra.notificacoes=[...(cur.notificacoes||[]),{id:`${id}-rv-${Date.now()}`,em,tipo:"revisao",titulo:"RMS devolvida para revisão",texto:msg}]; parts.push(`Devolvida para revisão: "${msg}"`); }
   if(st!==was && !neg && st!=="revisao") parts.push("Status: "+STATUS[st].label);
   if(FINAIS.includes(st)) extra.concluidoEm = st===was&&cur.concluidoEm ? cur.concluidoEm : new Date().toISOString(); else extra.concluidoEm=null;
-  if(!parts.length){ toast("Nada mudou nesta RMS."); return; }
+  const fechar=()=>{ S.openId=null; if(S.view!=="suprimentos") location.hash="#suprimentos"; else render(); window.scrollTo(0,0); };
+  if(!parts.length){ toast(`RMS ${fmtNum(id)}: nada mudou.`); fechar(); return; }
   t.disabled=true; t.textContent="Salvando…";
   try{
     if(codCh.length){ const entry={em:new Date().toISOString(), por:"Suprimentos", uid:S.uid||null, alteracoes:codCh}, patch={itens:novosItens, log:[...(r.log||[]), entry]};
       if(S.mode==="db") await S.db.doc("rms/"+id).update(patch); else { Object.assign(r,patch); localSave(); } Object.assign(r,patch); }
     await saveStatus(id,{status:st,rcPr:rc,dataRcPr:dt,...extra},parts.join(" · "));
-    toast(`RMS ${fmtNum(id)} atualizada · ${STATUS[st].label}.`); S.openId=null; if(S.view!=="suprimentos") location.hash="#suprimentos"; else render(); window.scrollTo(0,0); }
+    toast(`RMS ${fmtNum(id)} atualizada · ${STATUS[st].label}.`); fechar(); }
   catch(e){ t.disabled=false; t.textContent="Salvar"; toast(e?.code==="permission_denied"?"Somente Editores do portal (Suprimentos) podem alterar a RMS.":"Falha ao salvar. Tente novamente."); }
 }
 /* ---------- Notificações ao solicitante (pop-up no Painel de acompanhamento) ---------- */
@@ -2536,12 +2537,12 @@ document.addEventListener("click",async ev=>{
     if(novasN.length){ stPatch.notificacoes=[...(cur.notificacoes||[]), ...novasN]; ev.push("Solicitante notificado: "+novasN.map(n=>n.titulo).join("; ")); }
     const dPatch={prBloqueada:v.prBloqueada, obs:v.obs, itens, dataPedido:null, fornecedor:null, dataRemessa:null, nf:null, qtdTotal:null, qtdEntregue:null, dataEntrega:null, entregue:null};
     const dChanged = v.prBloqueada!==!!dg.prBloqueada || v.obs!==(dg.obs||"") || JSON.stringify(itens)!==JSON.stringify(old.map(o=>({pedido:o.pedido||"",dataPedido:o.dataPedido||"",fornecedor:o.fornecedor||"",dataRemessa:o.dataRemessa||"",nf:o.nf||"",qtdEntregue:itemEnt(o),dataEntrega:o.dataEntrega||"",obs:o.obs||""})));
-    if(!ev.length && !dChanged){ toast("Nada mudou nesta RMS."); return; }
+    if(!ev.length && !dChanged){ S.dilEdit=null; S.dilKeep=null; toast(`RMS ${fmtNum(id)}: nada mudou.`); render(); window.scrollTo(0,0); return; }
     t.disabled=true;
     try{
       if(ev.length) await saveStatus(id,stPatch,ev.join(" · "));
       if(dChanged||ev.length) await saveDilig(id,dPatch);
-      S.dilEdit=null; S.dilKeep=null; toast(`RMS ${fmtNum(id)}: diligenciamento salvo · ${ENT[entregaOf(r).k].l}.`); render();
+      S.dilEdit=null; S.dilKeep=null; toast(`RMS ${fmtNum(id)}: diligenciamento salvo · ${ENT[entregaOf(r).k].l}.`); render(); window.scrollTo(0,0);
     }catch(e){ t.disabled=false; toast(e?.code==="permission_denied"?"Somente Editores do portal (Suprimentos) podem diligenciar.":"Falha ao salvar. Tente novamente."); }
   }
   else if(a==="supf"){ S.supFilter=t.dataset.f; render(); }
