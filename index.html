@@ -46,6 +46,11 @@ nav.side{background:var(--surface);border-right:1px solid var(--line);padding:22
 .ini-t{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .tasks{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
 .task{border:1px solid var(--line);border-left-width:5px;border-radius:10px;background:var(--surface);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;font:inherit;color:var(--fg);cursor:pointer}
+/* Trava de RMS em tratamento (nota 055) */
+.lockchip{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font:600 11px var(--sans);color:var(--warn);background:var(--warn-bg);border-radius:999px;padding:2px 8px;white-space:nowrap}
+.lockchip svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.4}
+.tf-lock{display:flex;gap:12px;align-items:center;padding:14px 18px;border-radius:12px;background:var(--warn-bg);color:#5c3a00;font-size:14px}
+.tf-lock svg{width:22px;height:22px;stroke:var(--warn);fill:none;stroke-width:2;flex:none}
 /* Início em bento (nota 049) */
 .bento{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:18px}
 .tile{border:1px solid var(--line);border-radius:18px;background:var(--surface);padding:18px 20px;display:flex;flex-direction:column;gap:8px;min-width:0;text-align:left;font:inherit;color:var(--fg)}
@@ -789,7 +794,7 @@ function viewSup(){
   ${loadingOr(!l.length?`<div class="empty">Nenhuma RMS nesta fila.</div>`:`<div class="tw"><table><thead><tr>${SUP_COLS.map(colTh).join("")}</tr></thead><tbody>
   ${!lf.length?`<tr><td colspan="${SUP_COLS.length}"><div class="empty">Nenhuma RMS com esses filtros. <button class="btn small" data-act="colxall">Limpar filtros</button></div></td></tr>`:""}
   ${pg.items.map(r=>{ const sx=S.status[r.id]||{}; const nec=necOf(r); const late=nec&&nec<today()&&!isFinal(r.id);
-    return `<tr class="click" data-act="open" data-id="${esc(r.id)}" tabindex="0"><td class="num"><strong style="color:var(--info);text-decoration:underline">${esc(fmtNum(r.id))}</strong><div style="font-size:11px;color:${r.encaminhadoEm?"var(--accent-dark)":"var(--muted)"}">${r.encaminhadoEm?"✓ e-mail enviado":"sem e-mail"}</div>${emergAlmox(r)?`<div><span class="pill st-almox" style="font-size:10.5px">em conferência no Almoxarifado</span></div>`:""}${ehNova(r)?`<div><span class="nova">NOVA</span></div>`:""}</td>
+    return `<tr class="click" data-act="open" data-id="${esc(r.id)}" tabindex="0"><td class="num"><strong style="color:var(--info);text-decoration:underline">${esc(fmtNum(r.id))}</strong>${travaChip(r.id)}<div style="font-size:11px;color:${r.encaminhadoEm?"var(--accent-dark)":"var(--muted)"}">${r.encaminhadoEm?"✓ e-mail enviado":"sem e-mail"}</div>${emergAlmox(r)?`<div><span class="pill st-almox" style="font-size:10.5px">em conferência no Almoxarifado</span></div>`:""}${ehNova(r)?`<div><span class="nova">NOVA</span></div>`:""}</td>
     <td>${prChip(r)}</td><td><span class="chip">${esc(r.tipo)}</span></td><td>${esc(r.solicitante?.nome)}<br><span class="num" style="color:var(--muted);font-size:12px">${esc(r.solicitante?.matricula)}</span></td>
     <td class="num" style="${late?"color:var(--bad);font-weight:600":""}">${fmtD(nec)}${late?" · atrasada":""}</td><td>${diasCell(r)}</td><td>${spotCell(r)}</td>
     <td class="num">${esc(sx.rcPr||"—")}<div class="sub">${fmtD(sx.dataRcPr)}</div></td>
@@ -924,7 +929,7 @@ function viewDilig(){
     <td class="num"><div class="clamp">${listaCurta(nfsOf(r))}</div></td>
     <td class="num r">${nfmt(e.total)}</td><td class="num r">${nfmt(e.ent)}</td><td class="num r" style="${e.pend>0&&e.ent>0?"color:var(--warn);font-weight:700":""}">${nfmt(e.pend)}</td>
     <td>${entPill(r)}${e.k==="entregue"&&ultimaEntrega(r)?`<div class="sub">em ${fmtD(ultimaEntrega(r))}</div>`:""}</td>
-    <td class="r"><button class="btn small primary" data-act="diledit" data-id="${id}">Diligenciar</button></td></tr>`;}).join("")}
+    <td class="r">${travaDe(r.id)?travaChip(r.id):`<button class="btn small primary" data-act="diledit" data-id="${id}">Diligenciar</button>`}</td></tr>`;}).join("")}
   </tbody></table></div>${pg.html}`)}</section>
   <div class="note">PR, pedidos, fornecedores, notas fiscais, quantidades e observações ficam visíveis só para Suprimentos. Cada item pode ter pedido, fornecedor, remessa e NF próprios. Com saldo pendente em algum item, a RMS fica como <strong>Entregue parcial</strong>.</div>`;
 }
@@ -1019,7 +1024,8 @@ async function reconciliar(){
   try{ for(const r of S.rms){ const sx=S.status[r.id]; if(!sx||S._recon.has(r.id)) continue; const cur=sx.status||"analise"; if(!ST_COMPRA.includes(cur)) continue;
       const exp=statusEntrega(r); if(!exp||exp===cur||(exp==="analise"&&cur==="analise")) { S._recon.add(r.id); continue; }
       S._recon.add(r.id); const fim=exp==="concluida"?(dItens(r).map(x=>x.dataEntrega).filter(Boolean).sort().pop()||today())+"T17:00:00-03:00":null;
-      await saveStatus(r.id,{status:exp, concluidoEm:fim}, `Status recalculado pela regra de entrega: ${STATUS[cur]?.label||cur} → ${STATUS[exp].label}`, {semAviso:true}); }
+      if(travaDe(r.id)) { S._recon.delete(r.id); continue; }
+      try{ await saveStatus(r.id,{status:exp, concluidoEm:fim}, `Status recalculado pela regra de entrega: ${STATUS[cur]?.label||cur} → ${STATUS[exp].label}`, {semAviso:true}); }catch(e){ S._recon.delete(r.id); console.warn("reconciliar",r.id,e); } }
   }catch(e){ console.warn("reconciliar",e); } S._reconBusy=false; softRender(); }
 const indSig = () => [S.indPer||"todos",S.indProj||"",S.indComp||""].join("|");
 const passaFiltro = r => !foraSup(r.id) && (!S.indProj || projOf(r)===S.indProj) && (!S.indComp || ((S.status[r.id]||{}).grupo||"__sem")===S.indComp);
@@ -1975,6 +1981,7 @@ function assinarDados(db, onR, onS){
   db.doc("config/sla").onSnapshot(d=>{ S.sla=d.exists?d.data():null; softRender(); }, ()=>{});
   db.doc("config/locais").onSnapshot(d=>{ S.locais=d.exists?(d.data().lista||null):null; softRender(); }, ()=>{});
   db.doc("config/compradores").onSnapshot(d=>{ S.compradores=(d.exists&&d.data().lista)||[]; softRender(); }, ()=>{});
+  if(db.supa) db.collection("travas").onSnapshot(snap=>{ const antes=S.openId?JSON.stringify(travaDe(S.openId)):""; const m={}; snap.docs.forEach(d=>m[d.id]=d.data()); S.travas=m; softRender(); if(S.openId && JSON.stringify(travaDe(S.openId))!==antes) renderDrawer(); }, ()=>{});
 }
 const supaVoltar = () => location.origin+location.pathname;
 async function bootSupa(){
@@ -2309,8 +2316,35 @@ function tratamentoBox(r){
     <p class="sub" style="margin:8px 0 0">Suprimentos ajusta código, tipo de compra, grupo e comprado. A descrição é do solicitante e só ele altera, pelo botão Editar RMS. Comprado (S/N) é marcação interna e <strong>não encerra</strong> a RMS: ela só fica <strong>Entregue</strong> quando a entrega total for registrada no Diligenciamento.</p>
    </div></section>`;
 }
+/* ---------- Trava: enquanto um comprador trata a RMS, os outros só consultam (nota 055) ---------- */
+const LOCK_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+const agoraSrv = () => Date.now()+(S.relogio||0);
+function travaDe(id){ const t=(S.travas||{})[id]; if(!t || !t.uid || t.uid===S.uid) return null; if(new Date(t.expira).getTime()<=agoraSrv()) return null; return t; }
+const travaChip = id => { const t=travaDe(id); return t?`<div class="lockchip" title="Em tratamento desde ${esc(fmtDT(t.desde))}">${LOCK_SVG}Em uso · ${esc(String(t.nome||t.email||"outro comprador").split(" ")[0])}</div>`:""; };
+const travaAviso = t => `<div class="tf-lock" role="status">${LOCK_SVG}<div><b>Em tratamento por ${esc(t.nome||t.email)}</b> desde ${esc(fmtDT(t.desde))}. Você pode consultar; as alterações ficam liberadas quando ${esc(String(t.nome||"").split(" ")[0]||"essa pessoa")} salvar ou fechar a RMS.</div></div>`;
+const travaUsa = () => S.supa && S.mode==="db" && S.canSup && !!S.sb?.rpc;
+async function travaRpc(fn,rid){ try{ const {data,error}=await S.sb.rpc(fn,{rid}); if(error) throw error; return data; }catch(e){ console.warn(fn,e); return undefined; } }
+async function travar(id){ const t=await travaRpc("rms_travar",id); if(!t) return false;
+  if(t.agora) S.relogio=new Date(t.agora).getTime()-Date.now();
+  S.travas={...(S.travas||{}), [id]:t}; return t.uid===S.uid; }
+function travaDesejada(){ if(!travaUsa()) return null;
+  if(S.openId && ["suprimentos","dilig","indicadores"].includes(S.view)) return S.openId;
+  if(S.dilEdit && S.view==="dilig") return S.dilEdit; return null; }
+async function syncTrava(){ if(S._travaBusy) return; const want=travaDesejada(); if(want===S.minhaTrava && (want===null || S._travaPedida===want)) return;
+  if(want && want===S._travaPedida && !S.minhaTrava) return;
+  S._travaBusy=true;
+  try{ if(S.minhaTrava && S.minhaTrava!==want){ const old=S.minhaTrava; S.minhaTrava=null; await travaRpc("rms_liberar",old); if(S.travas) delete S.travas[old]; }
+    S._travaPedida=want;
+    if(want){ try{ const {data:{session}}=await S.sb.auth.getSession(); S.sbToken=session?.access_token||null; }catch{}
+      const ok=await travar(want); S.minhaTrava=ok?want:null; if(!ok){ renderDrawer(); if(S.view==="dilig") render(); } }
+  } finally { S._travaBusy=false; }
+  if(travaDesejada()!==S._travaPedida) syncTrava(); }
+setInterval(()=>{ if(S.minhaTrava && travaUsa()) travar(S.minhaTrava); },60000);
+addEventListener("pagehide",()=>{ if(!S.minhaTrava || !S.sbToken) return;
+  try{ fetch(RMS_SUPABASE.url+"/rest/v1/rpc/rms_liberar",{method:"POST",keepalive:true,headers:{apikey:RMS_SUPABASE.key,Authorization:"Bearer "+S.sbToken,"Content-Type":"application/json"},body:JSON.stringify({rid:S.minhaTrava})}); }catch{} });
 function tratFooter(r){
   const id=esc(r.id), sx=S.status[r.id]||{}, s=stOf(r.id), neg=isNeg(r.id);
+  { const tv=travaDe(r.id); if(tv) return `<div class="tfoot" id="tf-${id}" data-id="${id}">${travaAviso(tv)}</div>`; }
   const steps=[["analise","Em análise"],["atendimento","Em compra"],["pedido","Pedido emitido"],["concluida","Entregue"]];
   return `<div class="tfoot" id="tf-${id}" data-id="${id}">
    <input type="hidden" id="st-${id}" value="">
@@ -2364,6 +2398,7 @@ document.addEventListener("change",ev=>{
 document.addEventListener("input",ev=>{ const m=(ev.target.id||"").match(/^rc-(.+)$/); if(m) tfUpdate(m[1]); });
 async function tratSalvar(id, t){
   const E=CSS.escape(id), r=S.rms.find(x=>x.id===id); if(!r) return;
+  { const tv=travaDe(id); if(tv){ toast(`RMS em tratamento por ${tv.nome||tv.email}. Aguarde a liberação.`); return; } }
   const cur=S.status[id]||{}, parts=[], extra={}, n=(r.itens||[]).length;
   const rc=$("#rc-"+E).value.trim(), dt=$("#dt-"+E).value, ap=$("#ap-"+E).value, pj=$("#pj-"+E).value;
   const {st,k,v}=tratPrev(id), ms=$("#ms-"+E), msg=(ms?.value||"").trim();
@@ -2403,7 +2438,7 @@ async function tratSalvar(id, t){
       if(S.mode==="db") await S.db.doc("rms/"+id).update(patch); else { Object.assign(r,patch); localSave(); } Object.assign(r,patch); }
     await saveStatus(id,{status:st,rcPr:rc,dataRcPr:dt,...extra},parts.join(" · "));
     toast(`RMS ${fmtNum(id)} atualizada · ${STATUS[st].label}.`); fechar(); }
-  catch(e){ t.disabled=false; t.textContent="Salvar"; toast(e?.code==="permission_denied"?"Somente Editores do portal (Suprimentos) podem alterar a RMS.":"Falha ao salvar. Tente novamente."); }
+  catch(e){ t.disabled=false; t.textContent="Salvar"; toast(e?.code==="permission_denied"?(S.supa?"Não foi possível salvar: outro comprador está tratando esta RMS ou você não tem permissão.":"Somente Editores do portal (Suprimentos) podem alterar a RMS."):"Falha ao salvar. Tente novamente."); }
 }
 /* ---------- Notificações ao solicitante (pop-up no Painel de acompanhamento) ---------- */
 function minhasNotif(){
@@ -2464,6 +2499,7 @@ function renderNotif(){
     <div class="actions"><button class="btn primary" data-act="notifok">Entendi</button></div></div></div>`;
 }
 function renderDrawer(){
+  setTimeout(syncTrava,0);
   const root=$("#overlayRoot"); const r=S.rms.find(x=>x.id===S.openId);
   if(!r){ root.innerHTML=""; return; }
   const sx=S.status[r.id]||{}, st=STATUS[stOf(r.id)], bb=buyOf(r);
@@ -2523,7 +2559,7 @@ function renderDrawer(){
     </ul></div></section>
     ${almEd?almoxFooter(r):supCtx?tratFooter(r):""}
   </div></div>`;
-  if(supCtx) tfUpdate(r.id);
+  if(supCtx && !travaDe(r.id)) tfUpdate(r.id);
   if(almEd) almoxUpd(r.id);
 }
 
@@ -2539,7 +2575,7 @@ document.addEventListener("click",async ev=>{
   else if(a==="filter"){ S.filter=t.dataset.f; render(); }
   else if(a==="kfilter"){ S.filter=t.dataset.f; if(S.view==="painel"){ location.hash="#minhas"; } else render(); }
   else if(a==="dilf"){ S.dilFilter=t.dataset.f; render(); }
-  else if(a==="diledit"){ S.dilEdit = S.dilEdit===t.dataset.id ? null : t.dataset.id; if(!S.dilEdit&&S.pending){ S.pending=false; } render(); }
+  else if(a==="diledit"){ if(S.dilEdit!==t.dataset.id){ const tv=travaDe(t.dataset.id); if(tv){ toast(`RMS em tratamento por ${tv.nome||tv.email}.`); return; } } S.dilEdit = S.dilEdit===t.dataset.id ? null : t.dataset.id; if(!S.dilEdit&&S.pending){ S.pending=false; } render(); }
   else if(a==="indper"){ S.indPer=t.dataset.f; render(); }
   else if(a==="indgo"){ if(!S.canSup) return; S.dilFilter=t.dataset.f; location.hash="#dilig"; }
   else if(a==="dsort"){ const k=t.dataset.k, so=S.dilSort; S.dilSort = !so||so.k!==k ? {k,dir:1} : so.dir>0 ? {k,dir:-1} : null; render(); }
@@ -2880,7 +2916,7 @@ document.addEventListener("click", ev=>{
   else if(a==="lgesqueci"){ S.auth.modo="esqueci"; S.auth.erro=""; S.auth.info=""; renderLogin(); }
   else if(a==="lgprimeiro"){ S.auth.modo="primeiro"; S.auth.erro=""; S.auth.info=""; renderLogin(); }
   else if(a==="lgvoltar"){ S.auth.modo="login"; S.auth.erro=""; S.auth.info=""; S.auth.pend=null; renderLogin(); }
-  else if(a==="lgsair" && S.supa){ S.sb.auth.signOut().finally(()=>{ try{ sessionStorage.clear(); }catch{} location.hash="#painel"; location.reload(); }); }
+  else if(a==="lgsair" && S.supa){ (S.minhaTrava?travaRpc("rms_liberar",S.minhaTrava):Promise.resolve()).then(()=>S.sb.auth.signOut()).finally(()=>{ try{ sessionStorage.clear(); }catch{} location.hash="#painel"; location.reload(); }); }
   else if(a==="lgsair" && !S.supa){ try{ sessionStorage.removeItem(SESS_KEY); }catch{} const m=memLer(); if(m) memGravar({email:m.email, ate:null}); S.auth.estado="pendente"; S.auth.modo="login"; S.auth.erro=""; S.auth.user=null; S.canSup=!!S.claudeSup; S.isAdmin=false; S.canAlmox=false; renderLogin(); }
 });
 
