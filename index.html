@@ -458,6 +458,7 @@ body.locked .snwrap{display:none}
 <div id="toastRoot"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
@@ -555,14 +556,14 @@ function startLocal(){
 }
 function setConn(){
   const dot=$("#connDot"), lbl=$("#connLbl");
-  if(S.mode==="db"){ dot.className="dot on"; lbl.lastChild.textContent="Base compartilhada"; }
+  if(S.mode==="db"){ dot.className="dot on"; lbl.lastChild.textContent=S.supa?"Base compartilhada (nuvem)":"Base compartilhada"; }
   else if(S.mode==="local"){ dot.className="dot off"; lbl.lastChild.textContent="Modo local (este navegador)"; }
   $("#navIni").hidden = !(S.canSup||S.canAlmox); $("#navAlm").hidden = !(S.canSup||S.canAlmox); $("#ngAlm").hidden = $("#navAlm").hidden; $("#ngSup").hidden = !S.canSup; $("#ngAdm").hidden = !S.canSup; $("#navTod").hidden = !S.canSup; $("#navSup").hidden = !S.canSup; $("#navCfg").hidden = !S.canSup; $("#navDil").hidden = !S.canSup; $("#navInd").hidden = !S.canSup;
 }
 
 async function boot(){
   route(); render(); renderLogin();
-  if(!window.claude || typeof window.claude.use!=="function"){ startLocal(); return; }
+  if(!window.claude || typeof window.claude.use!=="function"){ if(window.supabase && RMS_SUPABASE.url){ try{ await bootSupa(); return; }catch(e){ console.error(e); } } startLocal(); return; }
   const timer=setTimeout(()=>{ if(S.mode==="loading") startLocal(); },10000);
   let db=null,user=null;
   try{ [db,user]=await Promise.all([window.claude.use("db"),window.claude.use("user")]); }catch{}
@@ -601,6 +602,7 @@ async function claimAndSave(body){
   for(let tries=0; tries<40; tries++, n++){
     const id=`${year}-${String(n).padStart(4,"0")}`;
     const ref=S.db.doc("rms/"+id);
+    if(ref.create){ if(await ref.create({...body, numero:id})) return id; continue; }
     const lease=await ref.acquire({holder, ttlMs:8000});
     if(!lease.acquired) continue;
     const snap=await ref.get();
@@ -1889,6 +1891,150 @@ function viewMinhas(){
   </div>${pg.html}</section>`)}`;
 }
 
+/* ---------- Supabase: base compartilhada fora do claude.ai (GitHub Pages) ---------- */
+/* Tabela única "docs" (col, id, data jsonb). Este adaptador imita a API usada pelo portal: collection().limit().onSnapshot/get, doc().get/set/update/delete/onSnapshot/acquire. */
+const RMS_SUPABASE = { url:"https://mcuglgvkkhzfgdhndlhg.supabase.co", key:"sb_publishable_El4fHBYFXoXOzARwq5_qEw_KMl89fyp" };
+function supaErr(e){ const m=String(e?.message||e||""); const err=new Error(m||"Falha no banco"); if(e?.code==="42501"||/row-level security|permission denied/i.test(m)) err.code="permission_denied"; return err; }
+function supaDb(sb){
+  const split=p=>{ const i=p.lastIndexOf("/"); return [p.slice(0,i), p.slice(i+1)]; };
+  const clean=v=>JSON.parse(JSON.stringify(v??{}));
+  const W={};
+  async function fetchCol(col){ let all=[], from=0;
+    for(;;){ const {data,error}=await sb.from("docs").select("id,data").eq("col",col).range(from,from+999); if(error) throw supaErr(error); all=all.concat(data||[]); if(!data||data.length<1000) break; from+=1000; }
+    return all; }
+  const colSnap=col=>{ const docs=[...W[col].cache.entries()].map(([id,data])=>({id,exists:true,data:()=>data})); return {docs,size:docs.length,empty:!docs.length}; };
+  const notify=col=>{ const w=W[col]; if(w&&w.ready) w.ls.forEach(l=>{ try{ l.cb(); }catch(e){ console.error(e); } }); };
+  function watch(col){
+    if(W[col]) return W[col];
+    const w=W[col]={cache:new Map(), ls:new Set(), ready:false};
+    const load=()=>fetchCol(col).then(rows=>{ w.cache=new Map(rows.map(r=>[r.id,r.data])); w.ready=true; notify(col); }).catch(e=>{ w.ls.forEach(l=>l.err&&l.err(e)); });
+    load(); w.poll=setInterval(load, 60000); // reserva caso o tempo real caia
+    return w; }
+  // tempo real: um canal para a tabela inteira, distribuído por coleção
+  try{ sb.channel("rms-docs").on("postgres_changes",{event:"*",schema:"public",table:"docs"},p=>{
+      const row=p.eventType==="DELETE"?p.old:p.new, col=row?.col; if(!col||!W[col]) return;
+      if(p.eventType==="DELETE") W[col].cache.delete(row.id); else W[col].cache.set(row.id,row.data); notify(col); }).subscribe(); }catch(e){ console.warn("realtime",e); }
+  const local=(col,id,v)=>{ const w=W[col]; if(!w) return; if(v===undefined) w.cache.delete(id); else w.cache.set(id,v); notify(col); };
+  return {
+    supa:true,
+    collection(col){ const q={ limit(){ return q; },
+      onSnapshot(cb,err){ const w=watch(col), l={cb:()=>cb(colSnap(col)), err}; w.ls.add(l); if(w.ready) l.cb(); return ()=>w.ls.delete(l); },
+      async get(){ const rows=await fetchCol(col); return {docs:rows.map(r=>({id:r.id,exists:true,data:()=>r.data})), size:rows.length, empty:!rows.length}; } }; return q; },
+    doc(path){ const [col,id]=split(path); return {
+      id,
+      async get(){ const {data,error}=await sb.from("docs").select("data").eq("col",col).eq("id",id).maybeSingle(); if(error) throw supaErr(error); return {id, exists:!!data, data:()=>data?data.data:undefined}; },
+      async set(v){ const d=clean(v); const {error}=await sb.from("docs").upsert({col,id,data:d,updated_at:new Date().toISOString()}); if(error) throw supaErr(error); local(col,id,d); },
+      async update(p){ const cur=await this.get(); await this.set({...(cur.exists?cur.data():{}), ...clean(p)}); },
+      async delete(){ const {error}=await sb.from("docs").delete().eq("col",col).eq("id",id); if(error) throw supaErr(error); local(col,id,undefined); },
+      async create(v){ const d=clean(v); const {error}=await sb.from("docs").insert({col,id,data:d}); if(error){ if(error.code==="23505") return false; throw supaErr(error); } local(col,id,d); return true; },
+      async acquire(){ return {acquired:true}; },
+      onSnapshot(cb,err){ const w=watch(col), l={cb:()=>{ const has=w.cache.has(id); cb({id, exists:has, data:()=>has?w.cache.get(id):undefined}); }, err}; w.ls.add(l); if(w.ready) l.cb(); return ()=>w.ls.delete(l); }
+    }; }
+  };
+}
+function assinarDados(db, onR, onS){
+  if(S.uid) try{ db.doc(`data/users/${S.uid}/notif`).onSnapshot(d=>{ S.vistos=new Set((d.exists&&d.data().vistos)||[]); S.supDesde=(d.exists&&d.data().supDesde)||S.supDesde||null; S.vistosOk=true; softRender(); }, ()=>{ S.vistosOk=true; }); }catch{ S.vistosOk=true; }
+  db.collection("rms").limit(1000).onSnapshot(snap=>{ S.rms=snap.docs.map(d=>({...d.data(), id:d.id})); onR&&onR(); softRender(); }, e=>toast("Falha ao atualizar a lista: "+(e?.message||e?.code||"")));
+  db.collection("status").limit(1000).onSnapshot(snap=>{ const m={}; snap.docs.forEach(d=>m[d.id]=d.data()); S.status=m; onS&&onS(); softRender(); }, ()=>{ onS&&onS(); });
+  db.collection("dilig").limit(1000).onSnapshot(snap=>{ const m={}; snap.docs.forEach(d=>m[d.id]=d.data()); S.dilig=m; S.diligOk=true; softRender(); setTimeout(reconciliar,500); }, ()=>{});
+  db.doc("config/sla").onSnapshot(d=>{ S.sla=d.exists?d.data():null; softRender(); }, ()=>{});
+  db.doc("config/locais").onSnapshot(d=>{ S.locais=d.exists?(d.data().lista||null):null; softRender(); }, ()=>{});
+  db.doc("config/compradores").onSnapshot(d=>{ S.compradores=(d.exists&&d.data().lista)||[]; softRender(); }, ()=>{});
+}
+const supaVoltar = () => location.origin+location.pathname;
+async function bootSupa(){
+  S.supa=true; S.claudeSup=true; S.canSup=false; S.canAlmox=false;
+  S.sb=window.supabase.createClient(RMS_SUPABASE.url, RMS_SUPABASE.key, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true}});
+  S.sb.auth.onAuthStateChange((ev,ses)=>{ if(ev==="PASSWORD_RECOVERY"){ S.auth.recSession=ses; S.auth.modo="recuperar"; S.auth.estado="pendente"; S.auth.erro=""; renderLogin(); } });
+  let session=null; try{ ({data:{session}}=await S.sb.auth.getSession()); }catch(e){ console.error(e); }
+  if(S.auth.modo==="recuperar") return;
+  if(session) return supaPosLogin(session);
+  S.mode="db"; setConn(); S.auth.estado="pendente"; S.auth.modo="login"; const mem=memLer(); if(mem?.email) S.auth.lastEmail=mem.email; renderLogin();
+}
+async function supaPosLogin(session, opts={}){
+  const a=S.auth; S.uid=session.user.id; const email=String(session.user.email||"").toLowerCase();
+  if(!S.db) S.db=supaDb(S.sb);
+  S.mode="db"; setConn();
+  const u=await lerUsuario(email);
+  if(!u || u.ativo===false){ await S.sb.auth.signOut(); a.estado="pendente"; a.modo="login"; a.erro=!u?`O e-mail ${email} não está cadastrado no portal. Peça o cadastro ao Suprimentos.`:"Seu acesso está inativo. Fale com o Suprimentos."; renderLogin(); return; }
+  let acc=null; try{ const d=await S.db.doc("acessos/"+u._k).get(); acc=d.exists?d.data():null; }catch{}
+  S.acessos={...(S.acessos||{}), [u._k]:acc||{}};
+  if(!S._dados){ S._dados=true; assinarDados(S.db); assinarUsuarios(); }
+  if(!opts.senhaDefinida && u.temp && !(String(acc?.senhaDefinidaEm||"")>String(u.temp.em||""))){ a.pend=u; a.modo="trocar"; a.estado="pendente"; a.erro=""; renderLogin(); return; }
+  entrar(u, !!opts.silencioso, !!opts.senhaDefinida);
+}
+function loginSupaBody(a, err){
+  if(a.modo==="primeiro") return `
+    <h2>Primeiro acesso</h2>
+    <p class="lg-info">Seu e-mail precisa estar cadastrado pelo Suprimentos. Crie aqui a sua senha.</p>
+    <form id="lgForm" class="lg-form" novalidate>
+      <label class="f">E-mail<input class="in" id="lgEmail" type="email" autocomplete="username" value="${esc(a.lastEmail||"")}" placeholder="nome@empresa.com.br"></label>
+      <label class="f">Senha<input class="in" id="lgSenha" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres"></label>
+      <label class="f">Confirmar senha<input class="in" id="lgSenha2" type="password" autocomplete="new-password"></label>
+      ${err}<button class="btn primary lg-btn" type="submit">Criar senha e entrar</button>
+      <button class="btn link" type="button" data-act="lgvoltar">Voltar para o login</button></form>`;
+  if(a.modo==="trocar"||a.modo==="recuperar") return `
+    <h2>Crie sua senha</h2>
+    <p class="lg-info">${a.modo==="trocar"?`Olá, ${esc(a.pend?.nome||"")}. Você entrou com uma senha temporária. Crie agora a sua senha pessoal.`:"Digite a sua nova senha (mínimo 8 caracteres)."}</p>
+    <form id="lgForm" class="lg-form" novalidate>
+      <label class="f">Nova senha<input class="in" id="lgSenha" type="password" autocomplete="new-password"></label>
+      <label class="f">Confirmar nova senha<input class="in" id="lgSenha2" type="password" autocomplete="new-password"></label>
+      ${err}<button class="btn primary lg-btn" type="submit">Salvar senha e entrar</button></form>`;
+  if(a.modo==="esqueci") return `
+    <h2>Esqueci minha senha</h2>
+    <p class="lg-info">Informe seu e-mail. Você vai receber um link para criar uma nova senha.</p>
+    <form id="lgForm" class="lg-form" novalidate>
+      <label class="f">E-mail<input class="in" id="lgEmail" type="email" autocomplete="username" value="${esc(a.lastEmail||"")}"></label>
+      ${a.info?`<div class="okbox" role="status"><div>${esc(a.info)}</div></div>`:""}${err}<button class="btn primary lg-btn" type="submit">Enviar link</button>
+      <button class="btn link" type="button" data-act="lgvoltar">Voltar para o login</button></form>`;
+  return `
+    <h2>Entrar</h2>
+    <form id="lgForm" class="lg-form" novalidate>
+      <label class="f">Login (e-mail)<input class="in" id="lgEmail" type="email" autocomplete="username" placeholder="nome@empresa.com.br" value="${esc(a.lastEmail||"")}"></label>
+      <label class="f">Senha<span class="lg-pw"><input class="in" id="lgSenha" type="password" autocomplete="current-password"><button type="button" class="btn small" data-act="lgver" aria-label="Mostrar senha">Mostrar</button></span></label>
+      ${a.info?`<div class="okbox" role="status"><div>${esc(a.info)}</div></div>`:""}${err}<button class="btn primary lg-btn" type="submit">Entrar</button>
+      <div class="lg-links"><button class="btn link" type="button" data-act="lgprimeiro">Primeiro acesso? Criar minha senha</button> · <button class="btn link" type="button" data-act="lgesqueci">Esqueci minha senha</button></div>
+    </form>
+    <p class="lg-info" style="text-align:center">Não tem acesso? Peça ao seu supervisor para solicitar o cadastro ao Suprimentos.</p>`;
+}
+const supaMsg = e => { const m=String(e?.message||e||""); return /invalid login/i.test(m)?"E-mail ou senha incorretos.":/not confirmed/i.test(m)?"E-mail ainda não confirmado. Abra o e-mail de confirmação que o sistema enviou.":/already registered|already been registered/i.test(m)?"Este e-mail já tem senha criada. Use Entrar ou Esqueci minha senha.":/password/i.test(m)&&/6|8|weak|short/i.test(m)?"Senha fraca: use pelo menos 8 caracteres.":/rate|too many/i.test(m)?"Muitas tentativas. Aguarde alguns minutos.":m||"Não foi possível concluir agora."; };
+async function supaSubmit(){
+  const a=S.auth; a.erro=""; a.info="";
+  const falha=m=>{ a.erro=m; renderLogin(); };
+  const email=($("#lgEmail")?.value||"").trim().toLowerCase(); if(email) a.lastEmail=email;
+  if(a.modo==="login"){
+    const senha=$("#lgSenha").value; if(!email||!senha) return falha("Informe o e-mail e a senha.");
+    const {data,error}=await S.sb.auth.signInWithPassword({email, password:senha}); if(error) return falha(supaMsg(error));
+    memGravar({email, ate:null}); return supaPosLogin(data.session);
+  }
+  if(a.modo==="primeiro"){
+    const senha=$("#lgSenha").value, s2=$("#lgSenha2").value;
+    if(!EMAIL_OK.test(email)) return falha("Informe um e-mail válido."); if(senha.length<8) return falha("A senha precisa ter pelo menos 8 caracteres."); if(senha!==s2) return falha("As senhas não conferem.");
+    const {data,error}=await S.sb.auth.signUp({email, password:senha, options:{emailRedirectTo:supaVoltar()}}); if(error) return falha(supaMsg(error));
+    if(!data.session){ a.modo="login"; a.info=`Enviamos um e-mail de confirmação para ${email}. Confirme e depois entre com a sua senha.`; return renderLogin(); }
+    return supaPosLogin(data.session, {senhaDefinida:true});
+  }
+  if(a.modo==="trocar"||a.modo==="recuperar"){
+    const senha=$("#lgSenha").value, s2=$("#lgSenha2").value;
+    if(senha.length<8) return falha("A senha precisa ter pelo menos 8 caracteres."); if(senha!==s2) return falha("As senhas não conferem.");
+    const {error}=await S.sb.auth.updateUser({password:senha}); if(error) return falha(supaMsg(error));
+    const {data:{session}}=await S.sb.auth.getSession(); a.pend=null; a.modo="login"; toast("Senha criada.");
+    try{ history.replaceState(null,"",location.pathname+location.search+(location.hash.includes("access_token")?"":location.hash)); }catch{}
+    return supaPosLogin(session, {senhaDefinida:true});
+  }
+  if(a.modo==="esqueci"){
+    if(!EMAIL_OK.test(email)) return falha("Informe um e-mail válido.");
+    const {error}=await S.sb.auth.resetPasswordForEmail(email, {redirectTo:supaVoltar()}); if(error) return falha(supaMsg(error));
+    a.info=`Se ${email} estiver cadastrado, você vai receber um e-mail com o link para criar uma nova senha.`; return renderLogin();
+  }
+}
+async function supaCriarConta(email, senha){
+  const tmp=window.supabase.createClient(RMS_SUPABASE.url, RMS_SUPABASE.key, {auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false, storageKey:"rms-cadastro"}});
+  const {error}=await tmp.auth.signUp({email, password:senha, options:{emailRedirectTo:supaVoltar()}});
+  if(error && !/already registered|already been registered/i.test(error.message||"")) throw new Error(supaMsg(error));
+  return !error;
+}
+
 /* ---------- Locais de retirada (cadastro na guia do Almoxarifado) ---------- */
 const LOCAIS_DEF=["Almoxarifado Central · balcão 1","Almoxarifado Central · balcão 2","Almoxarifado da Oficina Mecânica"];
 const locaisLista = () => Array.isArray(S.locais)&&S.locais.length ? S.locais : LOCAIS_DEF.map(nome=>({nome,ativo:true}));
@@ -2582,7 +2728,8 @@ function renderLogin(){
   const brand=`<div class="lg-brand"><div class="logo lg-logo" aria-hidden="true">RMS</div><h1>Requisição de Materiais e Serviços</h1><p>Transforme sua gestão de solicitações</p></div>`;
   const err=a.erro?`<div class="errors" role="alert">${esc(a.erro)}</div>`:"";
   let body;
-  if(a.estado==="carregando") body=`<p class="lg-info">Carregando…</p>`;
+  if(S.supa && a.estado!=="carregando") body=loginSupaBody(a,err);
+  else if(a.estado==="carregando") body=`<p class="lg-info">Carregando…</p>`;
   else if(a.modo==="primeiro") body=`
     <h2>Primeiro acesso do sistema</h2>
     <p class="lg-info">Ainda não há usuários cadastrados. Crie o acesso do administrador (perfil Suprimentos). Os demais usuários serão cadastrados em Configurações.</p>
@@ -2617,12 +2764,13 @@ function renderLogin(){
     </form>
     <p class="lg-info" style="text-align:center">Não tem acesso? Peça ao seu supervisor para solicitar o cadastro ao Suprimentos.</p>`;
   root.innerHTML=`<div class="lg-wrap"><div class="lg-card">${brand}${body}
-    <p class="lg-nota">Ambiente de teste · o padrão de e-mail corporativo será definido depois.</p></div></div>`;
+    <p class="lg-nota">${S.supa?"Base compartilhada na nuvem · ambiente de piloto":"Ambiente de teste · o padrão de e-mail corporativo será definido depois."}</p></div></div>`;
   setTimeout(()=>{ const f=[...root.querySelectorAll("input")].find(i=>!i.value)||root.querySelector("input"); f?.focus(); },0);
 }
 const EMAIL_OK=/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 document.addEventListener("submit", async ev=>{
   if(ev.target.id!=="lgForm") return; ev.preventDefault();
+  if(S.supa){ const b=ev.target.querySelector("button[type=submit]"); if(b){ b.disabled=true; b.textContent="Verificando…"; } try{ await supaSubmit(); }catch(e){ console.error(e); S.auth.erro=supaMsg(e); renderLogin(); } return; }
   const a=S.auth, btn=ev.target.querySelector("button[type=submit]"); a.erro="";
   const falha=m=>{ a.erro=m; renderLogin(); };
   if(btn){ btn.disabled=true; btn.textContent="Verificando…"; }
@@ -2664,9 +2812,11 @@ document.addEventListener("submit", async ev=>{
 document.addEventListener("click", ev=>{
   const t=ev.target.closest("[data-act]"); if(!t) return; const a=t.dataset.act;
   if(a==="lgver"){ const i=$("#lgSenha"); i.type=i.type==="password"?"text":"password"; t.textContent=i.type==="password"?"Mostrar":"Ocultar"; }
-  else if(a==="lgesqueci"){ S.auth.modo="esqueci"; S.auth.erro=""; renderLogin(); }
-  else if(a==="lgvoltar"){ S.auth.modo="login"; S.auth.erro=""; S.auth.pend=null; renderLogin(); }
-  else if(a==="lgsair"){ try{ sessionStorage.removeItem(SESS_KEY); }catch{} const m=memLer(); if(m) memGravar({email:m.email, ate:null}); S.auth.estado="pendente"; S.auth.modo="login"; S.auth.erro=""; S.auth.user=null; S.canSup=!!S.claudeSup; S.canAlmox=false; renderLogin(); }
+  else if(a==="lgesqueci"){ S.auth.modo="esqueci"; S.auth.erro=""; S.auth.info=""; renderLogin(); }
+  else if(a==="lgprimeiro"){ S.auth.modo="primeiro"; S.auth.erro=""; S.auth.info=""; renderLogin(); }
+  else if(a==="lgvoltar"){ S.auth.modo="login"; S.auth.erro=""; S.auth.info=""; S.auth.pend=null; renderLogin(); }
+  else if(a==="lgsair" && S.supa){ S.sb.auth.signOut().finally(()=>{ try{ sessionStorage.clear(); }catch{} location.hash="#painel"; location.reload(); }); }
+  else if(a==="lgsair" && !S.supa){ try{ sessionStorage.removeItem(SESS_KEY); }catch{} const m=memLer(); if(m) memGravar({email:m.email, ate:null}); S.auth.estado="pendente"; S.auth.modo="login"; S.auth.erro=""; S.auth.user=null; S.canSup=!!S.claudeSup; S.canAlmox=false; renderLogin(); }
 });
 
 /* ---------- Configurações › Usuários do portal (somente Suprimentos) ---------- */
@@ -2709,12 +2859,15 @@ document.addEventListener("submit", ev=>{
   if(!EMAIL_OK.test(f.email)){ S.usrErr="Informe um e-mail válido."; return render(); }
   if((S.usuarios||[]).some(u=>u._k===emailKey(f.email))){ S.usrErr=`${f.email} já está cadastrado. Use "Resetar senha" se a pessoa perdeu o acesso.`; return render(); }
   usrAcao(async()=>{ const senha=senhaTemporaria(), h=await hashSenha(senha), agora=new Date().toISOString(), por=S.auth.user?.nome||"Suprimentos";
+    if(S.supa && !(await supaCriarConta(f.email, senha))){ await salvarUsuario({...f, ativo:true, criadoEm:agora, criadoPor:por, historico:[{em:agora, acao:`Cadastrado por ${por} (já tinha senha no sistema)`}]});
+      S.usrForm={}; toast(`${f.nome} cadastrado. Esse e-mail já tinha senha: a pessoa entra com a senha dela ou usa "Esqueci minha senha".`); return; }
     await salvarUsuario({...f, ativo:true, criadoEm:agora, criadoPor:por, temp:{sal:h.sal,hash:h.hash,em:agora}, historico:[{em:agora, acao:`Cadastrado por ${por}${f.solicitadoPor?` a pedido de ${f.solicitadoPor}`:""}`}]});
     S.usrSenha={titulo:`Usuário ${f.nome} cadastrado.`, nome:f.nome, email:f.email, senha}; S.usrForm={}; toast("Usuário cadastrado."); });
 });
 document.addEventListener("click", ev=>{
   const t=ev.target.closest("[data-act]"); if(!t) return; const a=t.dataset.act, u=(S.usuarios||[]).find(x=>x._k===t.dataset.k);
   if(a==="usrok"){ S.usrSenha=null; render(); }
+  else if(a==="usrreset" && u && S.supa){ usrAcao(async()=>{ const {error}=await S.sb.auth.resetPasswordForEmail(u.email,{redirectTo:supaVoltar()}); if(error) throw new Error(supaMsg(error)); toast(`Enviamos para ${u.email} um link para criar uma nova senha.`); }); }
   else if(a==="usrreset" && u){ usrAcao(async()=>{ const senha=senhaTemporaria(), h=await hashSenha(senha), agora=new Date().toISOString(), por=S.auth.user?.nome||"Suprimentos";
       await salvarUsuario({...u, temp:{sal:h.sal,hash:h.hash,em:agora}, historico:[...(u.historico||[]), {em:agora, acao:`Senha resetada por ${por}`}]});
       S.usrSenha={titulo:`Senha de ${u.nome} resetada.`, nome:u.nome, email:u.email, senha}; toast("Senha resetada."); }); }
