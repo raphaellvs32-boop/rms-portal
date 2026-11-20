@@ -2194,7 +2194,7 @@ async function tratSalvar(id, t){
     if(codCh.length){ const entry={em:new Date().toISOString(), por:"Suprimentos", uid:S.uid||null, alteracoes:codCh}, patch={itens:novosItens, log:[...(r.log||[]), entry]};
       if(S.mode==="db") await S.db.doc("rms/"+id).update(patch); else { Object.assign(r,patch); localSave(); } Object.assign(r,patch); }
     await saveStatus(id,{status:st,rcPr:rc,dataRcPr:dt,...extra},parts.join(" · "));
-    toast(`RMS ${fmtNum(id)} atualizada · ${STATUS[st].label}.`); render(); }
+    toast(`RMS ${fmtNum(id)} atualizada · ${STATUS[st].label}.`); S.openId=null; if(S.view!=="suprimentos") location.hash="#suprimentos"; else render(); window.scrollTo(0,0); }
   catch(e){ t.disabled=false; t.textContent="Salvar"; toast(e?.code==="permission_denied"?"Somente Editores do portal (Suprimentos) podem alterar a RMS.":"Falha ao salvar. Tente novamente."); }
 }
 /* ---------- Notificações ao solicitante (pop-up no Painel de acompanhamento) ---------- */
