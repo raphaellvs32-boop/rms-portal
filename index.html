@@ -2788,7 +2788,7 @@ function entrar(u, silencioso, senhaDefinida){
 function renderLogin(){
   const root=$("#loginRoot"); if(!root) return;
   const a=S.auth; document.body.classList.toggle("locked", a.estado!=="ok");
-  const uBox=$("#userBox"); if(uBox){ uBox.hidden=a.estado!=="ok"; if(a.estado==="ok") $("#userName").textContent=`${a.user?.nome||a.user?.email||""} · ${PERFIS[a.user?.perfil]||""}`; }
+  const uBox=$("#userBox"); if(uBox){ uBox.hidden=a.estado!=="ok"; if(a.estado==="ok") $("#userName").textContent=`${a.user?.nome||a.user?.email||""} · ${PERFIS[a.user?.perfil]||""}${S.isAdmin?" · Administrador":""}`; }
   if(a.estado==="ok"){ root.innerHTML=""; return; }
   const brand=`<div class="lg-brand"><div class="logo lg-logo" aria-hidden="true">RMS</div><h1>Requisição de Materiais e Serviços</h1><p>Transforme sua gestão de solicitações</p></div>`;
   const err=a.erro?`<div class="errors" role="alert">${esc(a.erro)}</div>`:"";
@@ -2906,7 +2906,7 @@ function usuariosPanel(){
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small primary" data-act="copy" data-txt="${esc(`Acesso ao portal Requisição de Materiais e Serviços\nLogin: ${S.usrSenha.email}\nSenha temporária: ${S.usrSenha.senha}\nNo primeiro acesso você vai criar sua senha pessoal.`)}" data-ok="Dados de acesso copiados.">Copiar dados de acesso</button><button class="btn small" data-act="usrok">Fechar</button></div></div>`:""}
     ${!L.length?`<div class="empty">Nenhum usuário cadastrado.</div>`:`<div class="tw" style="margin-top:14px"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Matrícula</th><th>Setor</th><th>Perfil</th><th>Solicitado por</th><th>Último acesso</th><th>Situação</th><th></th></tr></thead><tbody>
     ${L.map(u=>`<tr><td><strong>${esc(u.nome)}</strong>${u.email===me?` <span class="chip">você</span>`:""}<div class="sub">desde ${fmtD(String(u.criadoEm||"").slice(0,10))}</div></td><td class="num">${esc(u.email)}</td><td class="num">${esc(u.matricula||"—")}</td><td>${esc(u.setor||"—")}</td>
-      <td><select class="in" style="width:140px" data-usr="perfil" data-k="${esc(u._k)}" ${u.email===me?"disabled title='Você não pode mudar o próprio perfil'":""}>${Object.entries(PERFIS).map(([k,v])=>`<option value="${k}" ${u.perfil===k?"selected":""}>${v}</option>`).join("")}</select></td>
+      <td><select class="in" style="width:140px" data-usr="perfil" data-k="${esc(u._k)}" ${u.email===me?"disabled title='Você não pode mudar o próprio perfil'":""}>${Object.entries(PERFIS).map(([k,v])=>`<option value="${k}" ${u.perfil===k?"selected":""}>${v}</option>`).join("")}</select>${u.admin===true?`<div style="margin-top:6px"><span class="chip" style="background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600" title="Acesso total, inclusive Configurações">Administrador</span></div>`:""}</td>
       <td>${esc(u.solicitadoPor||"—")}</td><td class="num">${(S.acessos||{})[u._k]?.ultimoAcesso?fmtDT((S.acessos||{})[u._k].ultimoAcesso):"nunca"}</td>
       <td>${u.ativo===false?`<span class="pill st-cancelado">Inativo</span>`:senhaPendente(u)?`<span class="pill st-analise">Senha temporária</span>`:`<span class="pill st-concluida">Ativo</span>`}</td>
       <td><div class="usract"><button class="btn small" data-act="usrreset" data-k="${esc(u._k)}">Resetar senha</button>
