@@ -4,11 +4,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: tema único claro (fundo branco), azul aço #0B3D6E como cor principal, grafite #334155 na estrutura e ciano petróleo #0E7490 como destaque; topo branco com faixa azul aço, navegação lateral fixa, área de trabalho clara com cartões de status e formulário espelhando a RMS Rev.02 */
+/* Layout: tema único claro (fundo branco), verde #84BD00 como cor principal, grafite #334155 na estrutura e ciano petróleo #0E7490 como destaque; topo branco com faixa azul aço, navegação lateral fixa, área de trabalho clara com cartões de status e formulário espelhando a RMS Rev.02 */
 :root{
   --band:#ffffff; --band-fg:#1e293b;
   --bg:#ffffff; --surface:#ffffff; --surface-2:#f4f6f9; --line:#e2e8f0; --muted:#64748b;
-  --fg:#1e293b; --accent:#0B3D6E; --accent-ink:#ffffff; --accent-soft:#e7eef7; --accent-dark:#0B3D6E;
+  --fg:#1e293b; --accent:#84BD00; --accent-ink:#1a2e05; --accent-soft:#f1f8e1; --accent-dark:#4F7A00;
   --grafite:#334155; --cyan:#0891B2; --cyan-dark:#0E7490; --cyan-soft:#e0f2f7;
   --warn:#a86400; --warn-bg:#fdf1dc; --info:#1f5fa8; --info-bg:#e3eefb; --ok:#3d7a00; --ok-bg:#e8f5d0;
   --bad:#b3261e; --bad-bg:#fbe6e4;
@@ -30,7 +30,7 @@ button,input,select,textarea{font:inherit;color:inherit}
   padding-block:16px;padding-left:max(24px,env(safe-area-inset-left,0px));padding-right:max(24px,env(safe-area-inset-right,0px));
   display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:14px;min-width:0}
-.logo{width:42px;height:42px;border-radius:8px;background:var(--accent);color:#ffffff;display:grid;place-items:center;font-weight:700;font-size:13px;letter-spacing:.02em;flex:none}
+.logo{width:42px;height:42px;border-radius:8px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:700;font-size:13px;letter-spacing:.02em;flex:none}
 .brand h1{margin:0;font-size:20px;line-height:1.2}
 .brand p{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
 .tag{border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:5px 12px;font-size:11.5px;letter-spacing:.03em;white-space:nowrap}
@@ -115,7 +115,7 @@ button.tile:hover{border-color:#c5d0de} button.tile:active{transform:translateY(
 .mtools{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .mchips{display:flex;gap:8px;flex-wrap:wrap}
 .mchip{border:1px solid var(--line);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;background:var(--surface);color:var(--fg);cursor:pointer;display:inline-flex;gap:6px;align-items:center}
-.mchip b{font-family:var(--mono)} .mchip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
+.mchip b{font-family:var(--mono)} .mchip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .mlist{display:flex;flex-direction:column}
 .mrow{display:grid;grid-template-columns:110px minmax(0,1fr) 200px 190px;gap:14px;align-items:center;padding:12px 16px;border-top:1px solid var(--line);cursor:pointer}
 .mrow:first-child{border-top:0} .mrow:hover{background:var(--surface-2)} .mrow.act{background:var(--bad-bg)}
@@ -357,7 +357,7 @@ body:has(.tfoot) .snwrap{bottom:calc(110px + env(safe-area-inset-bottom,0px));ma
 .steps button:first-child{border-radius:999px 0 0 999px;margin-left:0} .steps button:last-child{border-radius:0 999px 999px 0}
 .steps button.done{background:var(--accent-soft);color:var(--accent-dark)} .steps button.cur{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .lchart .grid{stroke:var(--line);stroke-width:1} .lchart .ax{font:11px var(--mono);fill:var(--muted)} .lchart .vl{font:600 12px var(--mono);fill:var(--fg)}
-.lchart .ln{fill:none;stroke:#0B3D6E;stroke-width:2.5;stroke-linejoin:round} .lchart .area{fill:#0891B2;opacity:.14} .lchart .pt{fill:#0B3D6E;stroke:var(--surface);stroke-width:2}
+.lchart .ln{fill:none;stroke:#4F7A00;stroke-width:2.5;stroke-linejoin:round} .lchart .area{fill:#0891B2;opacity:.14} .lchart .pt{fill:#4F7A00;stroke:var(--surface);stroke-width:2}
 .lttiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}
 .lttile{border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:2px} .lttile .l{font-size:12.5px;color:var(--muted)} .lttile .v{font-size:24px;font-weight:700} .lttile .s{font-size:11.5px;color:var(--muted)}
 .ltctl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
@@ -1073,7 +1073,7 @@ function lineTrim(c){
   const X=i=>qs.length===1?Lm+(W-Lm-R)/2:Lm+i*(W-Lm-R)/(qs.length-1), Y=v=>T+(H-T-B)*(1-v/top);
   const sE=qs.map((q,i)=>[X(i),Y(c.qE[q]||0),c.qE[q]||0,q]), sT=qs.map((q,i)=>[X(i),Y(c.qT[q]||0),c.qT[q]||0,q]);
   const ticks=[0,Math.round(top/2),top];
-  return `<div class="legend"><span><i style="background:#0B3D6E"></i>Pedidos entregues</span><span><i style="background:#9aa59a"></i>Pedidos emitidos</span></div>
+  return `<div class="legend"><span><i style="background:#4F7A00"></i>Pedidos entregues</span><span><i style="background:#9aa59a"></i>Pedidos emitidos</span></div>
   <div class="trimw"><div class="tw"><svg class="lchart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pedidos por trimestre: ${qs.map(q=>`${qLabel(q)} emitidos ${c.qE[q]||0}, entregues ${c.qT[q]||0}`).join("; ")}" style="width:100%;min-width:320px;max-height:240px;height:auto">
     ${ticks.map(t=>`<line x1="${Lm}" x2="${W-R}" y1="${Y(t)}" y2="${Y(t)}" class="grid"/><text x="${Lm-8}" y="${Y(t)+4}" text-anchor="end" class="ax">${t}</text>`).join("")}
     <polyline points="${sE.map(p=>p[0]+","+p[1]).join(" ")}" class="ln2"/>
@@ -1262,7 +1262,7 @@ async function gerarPdf(){
   if(!window.jspdf?.jsPDF){ toast("O gerador de PDF não carregou. Recarregue a página e tente de novo."); return; }
   const L=S.rms.filter(r=>noPeriodo(r)&&passaFiltro(r)), c=indCalc(L);
   const temAnt=(S.indPer||"todos")!=="todos", p=temAnt?indCalc(S.rms.filter(r=>noPeriodo(r,1)&&passaFiltro(r))):null;
-  const {jsPDF}=window.jspdf, doc=new jsPDF({unit:"mm",format:"a4"}), W=210, M=14, G=[11,61,110], DG=[14,116,144], INK=[30,41,59], MUT=[100,116,139];
+  const {jsPDF}=window.jspdf, doc=new jsPDF({unit:"mm",format:"a4"}), W=210, M=14, G=[132,189,0], DG=[14,116,144], INK=[30,41,59], MUT=[100,116,139];
   const per=(PERIODOS.find(x=>x[0]===(S.indPer||"todos"))||[])[1], fil=[S.indProj?`Projeto: ${S.indProj}`:"", S.indComp?`Comprador: ${S.indComp==="__sem"?"sem grupo":S.indComp}`:""].filter(Boolean).join(" · ")||"Sem filtros";
   let y=0;
   const header=()=>{ doc.setFillColor(...G); doc.rect(0,0,W,4,"F"); };
@@ -1869,7 +1869,7 @@ window.addEventListener("scroll",()=>{ if(S.colOpen){ S.colFocus=false; renderCo
 
 /* ---------- Minhas RMS (solicitante): três cartões + lista resumida com mini linha do tempo ---------- */
 const MIN_GR = r => { const s=stOf(r.id); return s==="revisao"?"acao":["concluida","estoque"].includes(s)?"fim":["cancelado","recusado"].includes(s)?"enc":"and"; };
-const MIN_PARTS=[["Almoxarifado","almox","#334155"],["Análise","analise","#0B3D6E"],["Compra","atendimento","#3b6ea5"],["Pedido","pedido","#0891B2"],["Parcial","parcial","#7dd3e5"]];
+const MIN_PARTS=[["Almoxarifado","almox","#334155"],["Análise","analise","#84BD00"],["Compra","atendimento","#3b6ea5"],["Pedido","pedido","#0891B2"],["Parcial","parcial","#7dd3e5"]];
 function miniTrilha(r){
   const s=stOf(r.id), sx=S.status[r.id]||{}, revAlm=s==="revisao"&&sx.revisao?.origem==="almox", est=s==="estoque", neg=isNeg(r.id), peds=pedidosOf(r).length;
   const st=[
