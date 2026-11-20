@@ -592,7 +592,7 @@ function setConn(){
   const dot=$("#connDot"), lbl=$("#connLbl");
   if(S.mode==="db"){ dot.className="dot on"; lbl.lastChild.textContent=S.supa?"Base compartilhada (nuvem)":"Base compartilhada"; }
   else if(S.mode==="local"){ dot.className="dot off"; lbl.lastChild.textContent="Modo local (este navegador)"; }
-  $("#navIni").hidden = !(S.canSup||S.canAlmox); $("#navAlm").hidden = !(S.canSup||S.canAlmox); $("#ngAlm").hidden = $("#navAlm").hidden; $("#ngSup").hidden = !S.canSup; $("#ngAdm").hidden = !S.canSup; $("#navTod").hidden = !S.canSup; $("#navSup").hidden = !S.canSup; $("#navCfg").hidden = !S.canSup; $("#navDil").hidden = !S.canSup; $("#navInd").hidden = !S.canSup;
+  $("#navIni").hidden = !(S.canSup||S.canAlmox); $("#navAlm").hidden = !(S.canSup||S.canAlmox); $("#ngAlm").hidden = $("#navAlm").hidden; $("#ngSup").hidden = !(S.canSup||S.canAlmox); $("#ngAdm").hidden = !S.isAdmin; $("#navTod").hidden = !S.canSup; $("#navSup").hidden = !S.canSup; $("#navCfg").hidden = !S.isAdmin; $("#navDil").hidden = !S.canSup; $("#navInd").hidden = !(S.canSup||S.canAlmox);
 }
 
 async function boot(){
@@ -632,6 +632,7 @@ async function claimAndSave(body){
     const id=`${year}-${String(n).padStart(4,"0")}`;
     S.rms.push({...body,id}); localSave(); return id;
   }
+  if(S.supa && S.sb?.rpc){ try{ const {data,error}=await S.sb.rpc("rms_proximo_numero",{ano:String(year)}); if(!error && +data>0) n=Math.max(n,+data); }catch{} }
   const holder=(S.uid||"anon")+"-"+Math.random().toString(36).slice(2,8);
   for(let tries=0; tries<40; tries++, n++){
     const id=`${year}-${String(n).padStart(4,"0")}`;
@@ -687,9 +688,9 @@ function render(){
   else if(S.view==="suprimentos") m.innerHTML=S.canSup?viewSup():viewPainel();
   else if(S.view==="almox") m.innerHTML=(S.canSup||S.canAlmox)?viewAlmox():viewPainel();
   else if(S.view==="todas") m.innerHTML=S.canSup?viewLista(false):viewPainel();
-  else if(S.view==="config") m.innerHTML=S.canSup?viewConfig():viewPainel();
+  else if(S.view==="config") m.innerHTML=S.isAdmin?viewConfig():viewPainel();
   else if(S.view==="dilig") m.innerHTML=S.canSup?viewDilig():viewPainel();
-  else if(S.view==="indicadores") m.innerHTML=S.canSup?viewIndicadores():viewPainel();
+  else if(S.view==="indicadores") m.innerHTML=(S.canSup||S.canAlmox)?viewIndicadores():viewPainel();
   else m.innerHTML=viewPainel();
   m.insertAdjacentHTML("beforeend",`<footer class="foot">Requisição de Materiais e Serviços · baseado no Formulário de RMS 2026 Rev.02 · Classificação: Uso Interno</footer>`);
   renderDrawer();
@@ -1162,7 +1163,7 @@ function viewIndicadores(){
   // comparação com período anterior: bom = "up" ou "down"
   const delta=(cur,prev,bom,unid="")=>{ if(!temAnt||cur==null||prev==null) return ""; const d=Math.round((cur-prev)*10)/10; if(!d) return `<span class="dl eq">= período anterior</span>`;
     const good=(d>0)===(bom==="up"); return `<span class="dl ${good?"good":"bad"}">${d>0?"▲":"▼"} ${nfmt(Math.abs(d))}${unid} vs. período anterior</span>`; };
-  const tile=(l,v,s,f,cls="",dl="")=>`<button class="kpi ${cls}" ${f?`data-act="indgo" data-f="${f}"`:""}><span class="l">${l}</span><span class="v">${v}</span><span class="s">${s}</span>${dl}</button>`;
+  const tile=(l,v,s,f,cls="",dl="")=>`<button class="kpi ${cls}" ${f&&S.canSup?`data-act="indgo" data-f="${f}"`:""}><span class="l">${l}</span><span class="v">${v}</span><span class="s">${s}</span>${dl}</button>`;
   const segs=[["Entregue",ent.length,"#84BD00"],["Entregue parcial",parc.length,"#f2c200"],["Não entregue",nao.length,"#9aa59a"]];
   const prRows=Object.entries(PRIOR).sort((a,b)=>b[1].ord-a[1].ord).map(([k,pr])=>({l:pr.label,lh:`<span class="prio ${pr.cls}">${pr.label}</span>`,v:L.filter(r=>(r.prioridade||"normal")===k).length}));
   const donut=(()=>{ const cores={"Capex":"#2a78d6","Opex":"#eb6834","Logística":"#1baf7a","Não informado":"#9aa59a"};
@@ -1660,7 +1661,7 @@ const b64 = buf => { let s="", u=new Uint8Array(buf); for(let i=0;i<u.length;i+=
 const unb64 = str => { const bin=atob(str), u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; };
 async function guardarNoBanco(f){
   const data=b64(await f.arrayBuffer()), aid=Date.now().toString(36)+Math.random().toString(36).slice(2,7), n=Math.ceil(data.length/CHUNK);
-  for(let i=0;i<n;i++) await S.db.doc(`anexos/${aid}-${i}`).set({i,n,nome:f.name,data:data.slice(i*CHUNK,(i+1)*CHUNK)});
+  for(let i=0;i<n;i++) await S.db.doc(`anexos/${aid}-${i}`).set({i,n,nome:f.name,uid:S.uid||null,data:data.slice(i*CHUNK,(i+1)*CHUNK)});
   return {id:"db:"+aid, partes:n};
 }
 async function uploadFiles(files){
@@ -2540,7 +2541,7 @@ document.addEventListener("click",async ev=>{
   else if(a==="dilf"){ S.dilFilter=t.dataset.f; render(); }
   else if(a==="diledit"){ S.dilEdit = S.dilEdit===t.dataset.id ? null : t.dataset.id; if(!S.dilEdit&&S.pending){ S.pending=false; } render(); }
   else if(a==="indper"){ S.indPer=t.dataset.f; render(); }
-  else if(a==="indgo"){ S.dilFilter=t.dataset.f; location.hash="#dilig"; }
+  else if(a==="indgo"){ if(!S.canSup) return; S.dilFilter=t.dataset.f; location.hash="#dilig"; }
   else if(a==="dsort"){ const k=t.dataset.k, so=S.dilSort; S.dilSort = !so||so.k!==k ? {k,dir:1} : so.dir>0 ? {k,dir:-1} : null; render(); }
   else if(a==="dilclose"){ if(t.classList.contains("overlay") && ev.target!==t) return; S.dilEdit=null; if(S.pending){ S.pending=false; } render(); }
   else if(a==="xlsx"){ exportXlsx(); }
@@ -2778,8 +2779,9 @@ function entrar(u, silencioso, senhaDefinida){
   if(!silencioso) memGravar(a.mem ? {email:u.email, ate:new Date(Date.now()+MEM_DIAS*864e5).toISOString()} : null);
   S.canSup = !!S.claudeSup && (u.perfil||"solicitante")==="suprimentos";
   S.canAlmox = !!S.claudeSup && (u.perfil||"solicitante")==="almoxarifado";
+  S.isAdmin = S.canSup && (!S.supa || u.admin===true);
   setConn(); renderLogin();
-  if((!S.canSup && ["suprimentos","config","dilig","indicadores"].includes(S.view)) || (!S.canSup && !S.canAlmox && S.view==="almox")) location.hash = S.canAlmox ? "#almox" : "#painel"; else render();
+  if((!S.isAdmin && S.view==="config") || (!S.canSup && ["suprimentos","dilig"].includes(S.view)) || (!S.canSup && !S.canAlmox && S.view==="indicadores") || (!S.canSup && !S.canAlmox && S.view==="almox")) location.hash = S.canAlmox ? "#almox" : "#painel"; else render();
   if(!silencioso) toast(`Bem-vindo(a), ${u.nome||u.email}!`);
   if(S.canSup && (S.mode==="local"||S.diligOk)) setTimeout(reconciliar,800);
 }
@@ -2879,7 +2881,7 @@ document.addEventListener("click", ev=>{
   else if(a==="lgprimeiro"){ S.auth.modo="primeiro"; S.auth.erro=""; S.auth.info=""; renderLogin(); }
   else if(a==="lgvoltar"){ S.auth.modo="login"; S.auth.erro=""; S.auth.info=""; S.auth.pend=null; renderLogin(); }
   else if(a==="lgsair" && S.supa){ S.sb.auth.signOut().finally(()=>{ try{ sessionStorage.clear(); }catch{} location.hash="#painel"; location.reload(); }); }
-  else if(a==="lgsair" && !S.supa){ try{ sessionStorage.removeItem(SESS_KEY); }catch{} const m=memLer(); if(m) memGravar({email:m.email, ate:null}); S.auth.estado="pendente"; S.auth.modo="login"; S.auth.erro=""; S.auth.user=null; S.canSup=!!S.claudeSup; S.canAlmox=false; renderLogin(); }
+  else if(a==="lgsair" && !S.supa){ try{ sessionStorage.removeItem(SESS_KEY); }catch{} const m=memLer(); if(m) memGravar({email:m.email, ate:null}); S.auth.estado="pendente"; S.auth.modo="login"; S.auth.erro=""; S.auth.user=null; S.canSup=!!S.claudeSup; S.isAdmin=false; S.canAlmox=false; renderLogin(); }
 });
 
 /* ---------- Configurações › Usuários do portal (somente Suprimentos) ---------- */
