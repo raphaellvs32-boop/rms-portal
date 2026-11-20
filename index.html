@@ -1997,7 +1997,7 @@ function loginSupaBody(a, err){
     </form>
     <p class="lg-info" style="text-align:center">Não tem acesso? Peça ao seu supervisor para solicitar o cadastro ao Suprimentos.</p>`;
 }
-const supaMsg = e => { const m=String(e?.message||e||""); return /invalid login/i.test(m)?"E-mail ou senha incorretos.":/not confirmed/i.test(m)?"E-mail ainda não confirmado. Abra o e-mail de confirmação que o sistema enviou.":/already registered|already been registered/i.test(m)?"Este e-mail já tem senha criada. Use Entrar ou Esqueci minha senha.":/password/i.test(m)&&/6|8|weak|short/i.test(m)?"Senha fraca: use pelo menos 8 caracteres.":/rate|too many/i.test(m)?"Muitas tentativas. Aguarde alguns minutos.":m||"Não foi possível concluir agora."; };
+const supaMsg = e => { const m=String(e?.message||e||""); return /invalid login/i.test(m)?"E-mail ou senha incorretos. Se é o seu primeiro acesso neste site, clique em \"Primeiro acesso? Criar minha senha\".":/not confirmed/i.test(m)?"E-mail ainda não confirmado. Abra o e-mail de confirmação que o sistema enviou.":/already registered|already been registered/i.test(m)?"Este e-mail já tem senha criada. Use Entrar ou Esqueci minha senha.":/password/i.test(m)&&/6|8|weak|short/i.test(m)?"Senha fraca: use pelo menos 8 caracteres.":/rate|too many/i.test(m)?"Muitas tentativas. Aguarde alguns minutos.":m||"Não foi possível concluir agora."; };
 async function supaSubmit(){
   const a=S.auth; a.erro=""; a.info="";
   const falha=m=>{ a.erro=m; renderLogin(); };
