@@ -2077,13 +2077,13 @@ async function bootSupa(){
   let session=null; try{ ({data:{session}}=await S.sb.auth.getSession()); }catch(e){ console.error(e); }
   if(S.auth.modo==="recuperar") return;
   /* Lembrar login (nota 073): marcado = 30 dias neste computador; desmarcado = a sessão acaba ao fechar o navegador */
-  const mem=memLer(), lembrar=!!(mem?.ate && Date.parse(mem.ate)>Date.now()), viva=(()=>{ try{ return sessionStorage.getItem("rms-sessao-viva")==="1"; }catch{ return false; } })();
+  const mem=memLer(), lembrar=!!(mem?.ate && Date.parse(mem.ate)>Date.now()), viva=vivaLer();
   if(session && !lembrar && !viva){ try{ await S.sb.auth.signOut(); }catch{} session=null; if(mem?.ate) memGravar({email:mem.email, ate:null}); }
   if(session) return supaPosLogin(session);
   S.mode="db"; setConn(); S.auth.estado="pendente"; S.auth.modo="login"; if(mem?.email) S.auth.lastEmail=mem.email; S.auth.mem=lembrar||!!mem?.lembrar; renderLogin();
 }
 async function supaPosLogin(session, opts={}){
-  try{ sessionStorage.setItem("rms-sessao-viva","1"); }catch{}
+  vivaGravar();
   const a=S.auth; S.uid=session.user.id; const email=String(session.user.email||"").toLowerCase();
   if(!S.db) S.db=supaDb(S.sb);
   S.mode="db"; setConn();
@@ -2942,6 +2942,9 @@ document.addEventListener("input",ev=>{ if(ev.target.classList?.contains("err") 
 const SESS_KEY="portal-rms-sessao", ACC_LOCAL="portal-rms-acesso", USR_LOCAL="portal-rms-usuarios";
 /* Memorizar: mantém o login neste navegador por 30 dias (até clicar em Sair) */
 const MEM_KEY="portal-rms-memorizar", MEM_DIAS=30;
+/* marca de "navegador aberto": cookie de sessão (vale para todas as abas e some ao fechar o navegador) — nota 073 */
+function vivaLer(){ try{ if(document.cookie.split(";").some(c=>c.trim()==="rms_viva=1")) return true; }catch{} try{ return sessionStorage.getItem("rms-sessao-viva")==="1"; }catch{ return false; } }
+function vivaGravar(){ try{ document.cookie="rms_viva=1; path=/; SameSite=Lax"+(location.protocol==="https:"?"; Secure":""); }catch{} try{ sessionStorage.setItem("rms-sessao-viva","1"); }catch{} }
 const memLer = () => { try{ return JSON.parse(localStorage.getItem(MEM_KEY)||"null"); }catch{ return null; } };
 const memGravar = v => { try{ v ? localStorage.setItem(MEM_KEY,JSON.stringify(v)) : localStorage.removeItem(MEM_KEY); }catch{} };
 const PERFIS={solicitante:"Solicitante", almoxarifado:"Almoxarifado", suprimentos:"Suprimentos"};
@@ -3010,7 +3013,7 @@ async function iniciarLogin(){
 function entrar(u, silencioso, senhaDefinida){
   const a=S.auth; if(!silencioso) registrarAcesso(u, senhaDefinida); a.user=u; a.estado="ok"; a.erro=""; a.tent=0;
   try{ sessionStorage.setItem(SESS_KEY,u.email); }catch{}
-  if(!silencioso) memGravar(a.mem ? {email:u.email, ate:new Date(Date.now()+MEM_DIAS*864e5).toISOString()} : null);
+  if(!silencioso && !S.supa) memGravar(a.mem ? {email:u.email, ate:new Date(Date.now()+MEM_DIAS*864e5).toISOString()} : null); /* no site (Supabase) quem grava é o login — nota 073 */
   S.canSup = !!S.claudeSup && (u.perfil||"solicitante")==="suprimentos";
   S.canAlmox = !!S.claudeSup && (u.perfil||"solicitante")==="almoxarifado";
   S.isAdmin = S.canSup && (!S.supa || u.admin===true);
