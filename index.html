@@ -180,6 +180,7 @@ tbody tr:last-child td{border-bottom:none}
 .pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
 .st-analise{background:var(--warn-bg);color:var(--warn)} .st-atendimento{background:var(--info-bg);color:var(--info)} .st-concluida{background:var(--ok-bg);color:var(--ok)} .st-cancelado{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)} .st-recusado{background:var(--bad-bg);color:var(--bad)} .st-revisao{background:#f1e8fb;color:#6b2fa8} .st-almox{background:#e8eefb;color:#2f4fa8} .st-pedido{background:#e3f1f6;color:#0f5f7a} .st-parcial{background:#fdf1dc;color:#a86400} .st-estoque{background:#e6f4ea;color:#2b6b3a}
 .aseg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.aseg.err{border-color:var(--bad);box-shadow:0 0 0 3px var(--bad-bg)}
 .aseg button{font:600 12.5px var(--sans);padding:7px 11px;border:0;border-left:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer}
 .aseg button:first-child{border-left:0} .aseg button:disabled{cursor:default}
 .aseg button.on[data-v=estoque]{background:var(--accent);color:var(--accent-ink)} .aseg button.on[data-v=compra]{background:var(--info-bg);color:var(--info)} .aseg button.on[data-v=parcial]{background:var(--warn-bg);color:var(--warn)}
@@ -2356,9 +2357,9 @@ function almoxUpd(id){ const E=CSS.escape(id), el=$("#afs-"+E); if(!el) return; 
 const motivoErro = e => { const d=String(e?.detalhe||e?.message||e||"").trim(); return jwtVenceu(e)?"sua sessão expirou. Clique em Sair e entre de novo.":(d?d.slice(0,160):"sem detalhe"); };
 async function almoxConcluir(id, t){
   const r=S.rms.find(x=>x.id===id), E=CSS.escape(id), L=almoxLer(id); let erro="";
-  L.forEach((x,i)=>{ if(!x.dec) erro="Decida todos os itens: Estoque, Compra ou Parcial.";
+  L.forEach((x,i)=>{ const g=document.querySelector(`[aria-label="Decisão do item ${i+1}"]`); g?.classList.toggle("err",!x.dec); if(!x.dec) erro=erro||`Falta decidir o item ${i+1}: clique em Estoque, Compra ou Parcial antes de concluir.`;
     else if(x.dec==="parcial" && !(x.qe>0 && x.qe<x.q)){ erro=erro||`Item ${i+1}: no parcial, informe de 1 até ${x.q} menos 1.`; $(`#aq-${E}-${i}`)?.classList.add("err"); } });
-  if(erro){ toast(erro); return; }
+  if(erro){ toast(erro); document.querySelector(".aseg.err")?.scrollIntoView({behavior:"smooth",block:"center"}); return; }
   const agora=new Date().toISOString(), local=$("#al-"+E).value, obs=($("#ao-"+E).value||"").trim(), un=i=>(r.itens[i]||{}).un||"";
   const est=L.map((x,i)=>x.qe>0?`item ${i+1} (${String(x.qe).replace(".",",")} ${un(i)})`:"").filter(Boolean), comp=L.map((x,i)=>x.qc>0?`item ${i+1} (${String(x.qc).replace(".",",")} ${un(i)})`:"").filter(Boolean);
   const tudo=!comp.length, cur=S.status[id]||{};
@@ -2372,7 +2373,7 @@ async function almoxConcluir(id, t){
   try{ await saveStatus(id, patch, ev); }
   catch(e){ console.error("almoxConcluir",e); t.disabled=false; t.textContent="Concluir conferência"; toast(e?.code==="permission_denied"?"Sem permissão para gravar esta conferência. Confira o perfil do usuário em Configurações.":`Não foi possível salvar a conferência: ${motivoErro(e)}`); return; }
   toast(tudo?`RMS ${fmtNum(id)} atendida pelo estoque. Solicitante avisado.`:`RMS ${fmtNum(id)}: ${comp.length} item(ns) liberado(s) para Suprimentos.`);
-  try{ S.openId=null; render(); }catch(e){ console.error("render após conferência",e); location.reload(); }
+  try{ S.openId=null; if(S.view!=="almox") location.hash="#almox"; else render(); window.scrollTo(0,0); }catch(e){ console.error("render após conferência",e); location.reload(); }
 }
 async function almoxDevolver(id, t){
   const E=CSS.escape(id), m=$("#am-"+E), msg=(m?.value||"").trim();
@@ -2805,7 +2806,7 @@ document.addEventListener("click",async ev=>{
     if(a==="locdel"){ if(L.length<=1){ toast("Mantenha pelo menos um local cadastrado."); return; } L.splice(i,1); } else L[i].ativo=L[i].ativo===false;
     if(!L.some(l=>l.ativo!==false)){ toast("Mantenha pelo menos um local ativo."); return; }
     try{ await salvarLocais(L); toast("Locais de retirada atualizados."); render(); }catch(e){ toast(e?.code==="permission_denied"?"Sem permissão para alterar os locais.":`Falha ao salvar: ${motivoErro(e)}`); } }
-  else if(a==="adec"){ const id=t.dataset.id, i=+t.dataset.i, v=t.dataset.v, E=CSS.escape(id), r=S.rms.find(x=>x.id===id); if(!r) return; const q=+(r.itens[i]||{}).qtd||0;
+  else if(a==="adec"){ t.closest(".aseg")?.classList.remove("err"); const id=t.dataset.id, i=+t.dataset.i, v=t.dataset.v, E=CSS.escape(id), r=S.rms.find(x=>x.id===id); if(!r) return; const q=+(r.itens[i]||{}).qtd||0;
     $(`#ad-${E}-${i}`).value=v; t.parentElement.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t));
     const qi=$(`#aq-${E}-${i}`); qi.classList.remove("err"); qi.disabled=v!=="parcial"; qi.value = v==="estoque"?q : v==="compra"?0 : (q>1?Math.max(1,Math.floor(q/2)):""); if(v==="parcial"){ qi.focus(); qi.select(); }
     almoxUpd(id); }
