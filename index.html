@@ -286,6 +286,7 @@ table.dil tr.edit td{background:var(--surface-2);padding:16px}
 .dform .ilist{display:flex;flex-direction:column;gap:12px}
 .dform .resumo{grid-template-columns:1fr} .dform .resumo .f strong{color:var(--fg);font-size:13.5px;overflow-wrap:anywhere}
 .dform .rcbox{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent-soft)} .dform .rcbox .pill{white-space:normal}
+.rcsit{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
 .bulk{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--accent-soft);border:1px dashed var(--accent);border-radius:8px;padding:10px 12px}
 .bulk .in{width:150px} .bulk .sub{flex-basis:100%}
 .icard{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--surface);display:grid;gap:10px}
@@ -578,10 +579,15 @@ const diasAprovPr = r => { const sx=S.status[r.id]||{}; return dDiff(sx.dataRcPr
 /* PR criada por Suprimentos nasce BLOQUEADA; só fica liberada quando o Diligenciamento informa a RC (nº + data de aprovação do gerente) — nota 059 */
 const prBloq = r => { const sx=S.status[r.id]||{}; return !!String(sx.rcPr||"").trim() && !sx.dataAprovPr; };
 const diasGerente = r => { const sx=S.status[r.id]||{}; if(!sx.dataRcPr) return null; return sx.dataAprovPr ? dDiff(sx.dataRcPr, sx.dataAprovPr) : dDiff(sx.dataRcPr, today()); };
+/* farol do tempo com o gerente (nota 060): até 5 dias verde · 6 e 7 amarelo · mais de 7 vermelho */
+const GER_FAROL = { verde:5, amarelo:7 };
+const farolGer = d => d==null ? "verde" : d<=GER_FAROL.verde ? "verde" : d<=GER_FAROL.amarelo ? "amarelo" : "vermelho";
+const farolGerTxt = d => `<span class="farol f-${farolGer(d)}" title="Farol do gerente: até ${GER_FAROL.verde} dias verde · ${GER_FAROL.verde+1} a ${GER_FAROL.amarelo} amarelo · acima de ${GER_FAROL.amarelo} vermelho"><i></i>${d??0} d</span>`;
 function rcSituacao(r){ const sx=S.status[r.id]||{}, d=diasGerente(r);
   if(!String(sx.rcPr||"").trim()) return `<span class="pill e-sem">Aguardando a PR de Suprimentos</span>`;
-  if(prBloq(r)) return `<span class="pill e-bloq">Bloqueada · com o gerente há ${d??0} dia(s) útil(eis)</span>`;
-  return `<span class="pill e-ok">Liberada em ${fmtD(sx.dataAprovPr)} · ${d??0} dia(s) útil(eis) com o gerente</span>`; }
+  const tip=`Farol do gerente: até ${GER_FAROL.verde} dias verde · ${GER_FAROL.verde+1} a ${GER_FAROL.amarelo} amarelo · acima de ${GER_FAROL.amarelo} vermelho`;
+  if(prBloq(r)) return `<span class="rcsit"><span class="pill e-bloq">Bloqueada</span><span class="farol f-${farolGer(d)}" title="${tip}"><i></i>com o gerente há ${d??0} dia(s) útil(eis)</span></span>`;
+  return `<span class="rcsit"><span class="pill e-ok">Liberada em ${fmtD(sx.dataAprovPr)}</span><span class="farol f-${farolGer(d)}" title="${tip}"><i></i>${d??0} dia(s) útil(eis) com o gerente</span></span>`; }
 const diasPedido = r => { const sx=S.status[r.id]||{}; return dDiff(sx.dataAprovPr||sx.dataRcPr, primeiroPedido(r)); };
 const grupoLabel = sx => sx.grupo ? `${sx.grupo}${sx.comprador?" · "+sx.comprador:""}` : "";
 const rmsById = id => { if(S._ixSrc!==S.rms||S._ixN!==S.rms.length){ S._ix=new Map(S.rms.map(r=>[r.id,r])); S._ixSrc=S.rms; S._ixN=S.rms.length; } return S._ix.get(id); };
@@ -1255,12 +1261,12 @@ function viewIndicadores(){
   <div class="dash">
    ${panel("PRs bloqueadas por projeto",`${bloq.length} PR(s) aguardando liberação`,donut)}
    ${panel("PRs bloqueadas · aguardando o gerente",`${bloq.length} PR(s) · mais antigas primeiro`,bloq.length?`<div class="tw"><table><thead><tr><th>Nº RMS</th><th>Nº PR</th><th>Projeto</th><th>Data da PR</th><th class="r">Dias com o gerente</th></tr></thead><tbody>
-   ${(S._pgB=paginar("ind-bloq",bloq,indSig())).items.map(r=>{ const d=diasGerente(r)||0, k=d>10?"vermelho":d>5?"amarelo":"verde"; return `<tr class="click" data-act="open" data-id="${esc(r.id)}"><td class="num">${esc(fmtNum(r.id))}</td><td class="num">${esc((S.status[r.id]||{}).rcPr||"—")}</td><td>${esc(projOf(r))}</td><td class="num">${fmtD((S.status[r.id]||{}).dataRcPr)}</td><td class="r"><span class="farol f-${k}"><i></i>${d} d</span></td></tr>`; }).join("")}</tbody></table></div>${S._pgB.html}`:empty("Nenhuma PR bloqueada no período."))}
+   ${(S._pgB=paginar("ind-bloq",bloq,indSig())).items.map(r=>{ const d=diasGerente(r)||0, k=farolGer(d); return `<tr class="click" data-act="open" data-id="${esc(r.id)}"><td class="num">${esc(fmtNum(r.id))}</td><td class="num">${esc((S.status[r.id]||{}).rcPr||"—")}</td><td>${esc(projOf(r))}</td><td class="num">${fmtD((S.status[r.id]||{}).dataRcPr)}</td><td class="r"><span class="farol f-${k}"><i></i>${d} d</span></td></tr>`; }).join("")}</tbody></table></div>${S._pgB.html}`:empty("Nenhuma PR bloqueada no período."))}
   </div>
   ${(()=>{ const ap=L.filter(r=>(S.status[r.id]||{}).dataAprovPr && (S.status[r.id]||{}).dataRcPr).map(r=>({r,d:diasGerente(r)})).filter(x=>x.d!=null).sort((a,b)=>b.d-a.d);
     const pg=paginar("ind-ger",ap,indSig());
     return panel("Tempo da PR com o gerente (PRs aprovadas)",ap.length?`${ap.length} PR(s) · média ${fdN(avgN(ap.map(x=>x.d)))} · maior ${fdN(ap[0].d)}`:"",ap.length?`<div class="tw"><table><thead><tr><th>Nº RMS</th><th>Nº PR</th><th>Criação da PR</th><th>Nº RC</th><th>Aprovação da RC</th><th>Projeto</th><th class="r">Dias com o gerente</th></tr></thead><tbody>
-      ${pg.items.map(({r,d})=>{ const sx=S.status[r.id]||{}, k=d>10?"vermelho":d>5?"amarelo":"verde"; return `<tr class="click" data-act="open" data-id="${esc(r.id)}"><td class="num">${esc(fmtNum(r.id))}</td><td class="num">${esc(sx.rcPr||"—")}</td><td class="num">${fmtD(sx.dataRcPr)}</td><td class="num">${esc(sx.rcNum||"—")}</td><td class="num">${fmtD(sx.dataAprovPr)}</td><td>${esc(projOf(r))}</td><td class="r"><span class="farol f-${k}"><i></i>${d} d</span></td></tr>`; }).join("")}</tbody></table></div>${pg.html}<p class="sub" style="margin:8px 0 0">Dias úteis entre a criação da PR (Suprimentos) e a aprovação da RC pelo gerente (Diligenciamento). Verde até 5 · amarelo até 10 · vermelho acima de 10.</p>`:empty("Nenhuma RC aprovada no período. Informe a RC no Diligenciamento."));
+      ${pg.items.map(({r,d})=>{ const sx=S.status[r.id]||{}, k=farolGer(d); return `<tr class="click" data-act="open" data-id="${esc(r.id)}"><td class="num">${esc(fmtNum(r.id))}</td><td class="num">${esc(sx.rcPr||"—")}</td><td class="num">${fmtD(sx.dataRcPr)}</td><td class="num">${esc(sx.rcNum||"—")}</td><td class="num">${fmtD(sx.dataAprovPr)}</td><td>${esc(projOf(r))}</td><td class="r"><span class="farol f-${k}"><i></i>${d} d</span></td></tr>`; }).join("")}</tbody></table></div>${pg.html}<p class="sub" style="margin:8px 0 0">Dias úteis entre a criação da PR (Suprimentos) e a aprovação da RC pelo gerente (Diligenciamento). Farol: verde até 5 dias · amarelo 6 e 7 dias · vermelho acima de 7 dias.</p>`:empty("Nenhuma RC aprovada no período. Informe a RC no Diligenciamento."));
   })()}
   ${panel("Pedidos emitidos e entregues por trimestre",`${tot} pedido(s) · ${ent.length} entregue(s)`,lineTrim(c))}
   ${panel("Lead time por tipo de compra e projeto","quadro dinâmico · PR → entrega do pedido",ltQuadro(L))}
