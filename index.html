@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html lang="pt-BR"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#84BD00"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="RMS"><meta name="apple-mobile-web-app-status-bar-style" content="default"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Requisição de Materiais e Serviços</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -136,7 +136,7 @@ button.tile:hover{border-color:#c5d0de} button.tile:active{transform:translateY(
 .side a{display:flex;gap:10px;align-items:center;padding:10px 12px;margin-bottom:4px;border-radius:8px;color:var(--fg);text-decoration:none;font-weight:600;font-size:13.5px}
 .side a:hover{background:var(--surface-2)}
 .side a[aria-current="page"]{background:var(--accent-soft);color:var(--accent-dark);box-shadow:inset 3px 0 0 var(--accent)}
-.side a .ic{width:16px;text-align:center;color:var(--muted);font-family:var(--mono)}
+.side a .ic{width:16px;text-align:center;color:var(--muted);font-family:var(--mono)} .side a .ls{display:none}
 main{padding-block:28px 40px;padding-left:max(28px,env(safe-area-inset-left,0px));padding-right:max(28px,env(safe-area-inset-right,0px));min-width:0;display:flex;flex-direction:column;gap:20px}
 .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
 .head h2{margin:0;font-size:24px;text-wrap:balance}
@@ -490,6 +490,33 @@ body.locked .snwrap{display:none}
   main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
   .top{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 }
+/* App no celular (nota 075): menu vira barra fixa embaixo e as listas viram cartões */
+@media (max-width:760px){
+  nav.side{position:fixed;left:0;right:0;bottom:0;z-index:30;border-top:1px solid var(--line);border-bottom:0;background:var(--surface);box-shadow:0 -8px 24px -18px rgba(15,23,34,.35);
+    padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px));gap:2px;justify-content:flex-start}
+  .side a{flex-direction:column;gap:3px;min-width:74px;padding:6px 8px;font-size:11px;font-weight:600;text-align:center;position:relative;border-radius:10px}
+  .side a .ic{width:auto;font-size:18px;line-height:1;color:inherit}
+  .side a .lb{display:none} .side a .ls{display:block}
+  main .tw table:has(tbody tr.click), main .tw table:has(tbody tr.dlrow){display:block} main .tw table:has(tbody tr.click) tbody, main .tw table:has(tbody tr.dlrow) tbody{width:100%}
+  .side a[aria-current="page"]{box-shadow:none}
+  .side a .badge{position:absolute;top:2px;right:10px;margin:0;font-size:10px;padding:0 5px}
+  main{padding-bottom:calc(92px + env(safe-area-inset-bottom,0px))}
+  .top .tag{display:none} .top .userbox .tag{display:none}
+  .brand h1{font-size:16px} .brand p{display:none} .logo{width:36px;height:36px}
+  main .tw{overflow:visible;border:0}
+  main .tw table:has(tbody tr.click), main .tw table:has(tbody tr.dlrow){min-width:0;width:100%;border-collapse:separate;border-spacing:0}
+  main .tw table:has(tbody tr.click) thead, main .tw table:has(tbody tr.dlrow) thead{display:none}
+  main .tw table:has(tbody tr.click) tbody, main .tw table:has(tbody tr.dlrow) tbody{display:flex;flex-direction:column;gap:10px}
+  main .tw tr.click, main .tw tr.dlrow{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--surface)}
+  main .tw tr.click td, main .tw tr.dlrow td{display:block;border:0;padding:0;min-width:0;max-width:100%;font-size:13px}
+  main .tw tr.click td:first-child, main .tw tr.dlrow td:first-child{flex-basis:100%;font-size:14.5px}
+  main .tw tr.click td:empty, main .tw tr.dlrow td:empty{display:none}
+  main .tw tr.dlrow td.r{flex-basis:100%;text-align:left} main .tw tr.dlrow td.r .btn{width:100%;padding:10px}
+  .colchips{display:none}
+  .tfoot{padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+  body:has(.drawer) nav.side{display:none}
+  #btnInstalar{display:inline-flex}
+}
 @media (max-width:520px){
   .g4,.g3,.g2,.g5,.g6,.sign{grid-template-columns:minmax(0,1fr)}
   .kpi .v{font-size:24px}
@@ -507,26 +534,27 @@ body.locked .snwrap{display:none}
     <span id="connLbl" class="tag"><span id="connDot" class="dot"></span>Conectando…</span>
     <span class="tag">USO INTERNO</span>
     <span id="bellBox" hidden><button class="bell" data-act="bell" aria-label="Notificações de novas RMS"><span aria-hidden="true">🔔</span><span id="bellN" class="bellN"></span></button></span>
+    <button type="button" class="btn small primary" id="btnInstalar" hidden>Instalar app</button>
     <span id="userBox" class="userbox" hidden><span class="tag">👤 <span id="userName"></span></span><button class="btn small" data-act="lgsair">Sair</button></span>
   </div>
 </div>
 
 <div class="shell">
   <nav class="side" aria-label="Menu">
-    <a href="#painel" data-v="painel" id="navIni" hidden><span class="ic">⌂</span>Início</a>
+    <a href="#painel" data-v="painel" id="navIni" hidden><span class="ic">⌂</span><span class="lb">Início</span><span class="ls">Início</span></a>
     <h3 class="ng" id="ngSol">Solicitar</h3>
-    <a href="#nova" data-v="nova"><span class="ic">+</span>Nova RMS</a>
-    <a href="#minhas" data-v="minhas"><span class="ic">☷</span>Minhas RMS</a>
+    <a href="#nova" data-v="nova"><span class="ic">+</span><span class="lb">Nova RMS</span><span class="ls">Nova</span></a>
+    <a href="#minhas" data-v="minhas"><span class="ic">☷</span><span class="lb">Minhas RMS</span><span class="ls">Minhas</span></a>
     <h3 class="ng" id="ngAlm" hidden>Almoxarifado</h3>
-    <a href="#almox" data-v="almox" id="navAlm" hidden><span class="ic">▦</span>Conferência de estoque<span class="badge" id="almBadge" hidden></span></a>
+    <a href="#almox" data-v="almox" id="navAlm" hidden><span class="ic">▦</span><span class="lb">Conferência de estoque</span><span class="ls">Conferir</span><span class="badge" id="almBadge" hidden></span></a>
     <h3 class="ng" id="ngSup">Suprimentos</h3>
-    <a href="#suprimentos" data-v="suprimentos" id="navSup"><span class="ic">▤</span>Fila de compras<span class="badge" id="supBadge" hidden></span></a>
-    <a href="#dilig" data-v="dilig" id="navDil"><span class="ic">⇄</span>Diligenciamento</a>
-    <a href="#indicadores" data-v="indicadores" id="navInd"><span class="ic">▥</span>Indicadores</a>
-    <a href="#todas" data-v="todas" id="navTod"><span class="ic">≣</span>Todas as RMS</a>
+    <a href="#suprimentos" data-v="suprimentos" id="navSup"><span class="ic">▤</span><span class="lb">Fila de compras</span><span class="ls">Fila</span><span class="badge" id="supBadge" hidden></span></a>
+    <a href="#dilig" data-v="dilig" id="navDil"><span class="ic">⇄</span><span class="lb">Diligenciamento</span><span class="ls">Dilig.</span></a>
+    <a href="#indicadores" data-v="indicadores" id="navInd"><span class="ic">▥</span><span class="lb">Indicadores</span><span class="ls">Indic.</span></a>
+    <a href="#todas" data-v="todas" id="navTod"><span class="ic">≣</span><span class="lb">Todas as RMS</span><span class="ls">Todas</span></a>
     <h3 class="ng" id="ngAdm">Administração</h3>
-    <a href="#gestor" data-v="gestor" id="navGes" hidden><span class="ic">◎</span>Painel do Gestor</a>
-    <a href="#config" data-v="config" id="navCfg"><span class="ic">⚙</span>Configurações</a>
+    <a href="#gestor" data-v="gestor" id="navGes" hidden><span class="ic">◎</span><span class="lb">Painel do Gestor</span><span class="ls">Gestor</span></a>
+    <a href="#config" data-v="config" id="navCfg"><span class="ic">⚙</span><span class="lb">Configurações</span><span class="ls">Config.</span></a>
   </nav>
   <main id="main" aria-live="polite"></main>
 </div>
@@ -987,7 +1015,7 @@ function viewDilig(){
   ${loadingOr(!l.length?`<div class="empty">Nenhuma RMS nesta situação.</div>`:`<div class="tw"><table class="dil"><colgroup><col style="width:140px"><col style="width:112px"><col style="width:150px"><col style="width:180px"><col style="width:100px"><col style="width:112px"><col style="width:150px"><col style="width:96px"><col style="width:92px"><col style="width:68px"><col style="width:80px"><col style="width:80px"><col style="width:136px"><col style="width:112px"></colgroup>
   <thead><tr>${sth("rms","Nº RMS")}${sth("prioridade","Prioridade")}${sth("solicitante","Solicitante")}${sth("itens","Itens")}${sth("pr","PR")}${sth("pedido","Pedido")}${sth("fornecedor","Fornecedor")}${sth("remessa","Remessa")}<th>Nota fiscal</th><th class="r">Qtd total</th><th class="r">Qtd entregue</th>${sth("pendente","Qtd pendente","r")}${sth("entrega","Entrega")}<th></th></tr></thead><tbody>
   ${pg.items.map(r=>{ const sx=S.status[r.id]||{}, dg=S.dilig[r.id]||{}, e=entregaOf(r), id=esc(r.id), its=r.itens||[], peds=pedidosOf(r), rd=proxRemessa(r), ven=vencida(r);
-    return `<tr class="${S.dilEdit===r.id?"sel":""}">
+    return `<tr class="dlrow ${S.dilEdit===r.id?"sel":""}">
     <td><button class="btn link num" data-act="open" data-id="${id}" style="padding:0">${esc(fmtNum(r.id))}</button><div style="margin-top:4px">${pillOf(r)}</div></td>
     <td>${prChip(r)}</td>
     <td>${esc(r.solicitante?.nome||"—")}<div class="sub num">${esc(r.solicitante?.matricula||"")}</div></td>
@@ -3084,6 +3112,12 @@ function renderLogin(){
 function lgFlowAnim(){ clearInterval(S._lgFlow); const L=[...document.querySelectorAll("#lgFlow li")]; if(!L.length) return;
   if(matchMedia("(prefers-reduced-motion: reduce)").matches){ L.forEach(li=>li.classList.add("on")); return; }
   let i=0; const tick=()=>{ if(!document.body.contains(L[0])){ clearInterval(S._lgFlow); return; } L.forEach((li,j)=>li.classList.toggle("on",j<=i)); i=(i+1)%(L.length+1); }; tick(); S._lgFlow=setInterval(tick,1300); }
+/* App instalável (nota 075): service worker no site publicado + botão "Instalar app" */
+if("serviceWorker" in navigator && (location.protocol==="https:"||["localhost","127.0.0.1"].includes(location.hostname))) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(e=>console.warn("sw",e)));
+let pedidoInstalar=null;
+window.addEventListener("beforeinstallprompt",ev=>{ ev.preventDefault(); pedidoInstalar=ev; const b=document.getElementById("btnInstalar"); if(b) b.hidden=false; });
+window.addEventListener("appinstalled",()=>{ pedidoInstalar=null; const b=document.getElementById("btnInstalar"); if(b) b.hidden=true; toast("App instalado. Ele aparece na tela inicial do celular."); });
+document.addEventListener("click",async ev=>{ if(ev.target.id!=="btnInstalar" || !pedidoInstalar) return; pedidoInstalar.prompt(); try{ await pedidoInstalar.userChoice; }catch{} pedidoInstalar=null; ev.target.hidden=true; });
 /* aviso de Caps Lock nos campos de senha (nota 072) */
 ["keyup","keydown"].forEach(t=>document.addEventListener(t,ev=>{ const el=ev.target; if(!(el instanceof HTMLInputElement) || el.type!=="password" || !ev.getModifierState) return;
   const on=ev.getModifierState("CapsLock"), box=el.closest("label")||el.parentElement; let w=box.parentElement.querySelector(":scope > .lg-caps");
