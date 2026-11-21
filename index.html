@@ -1552,7 +1552,7 @@ async function saveCompradores(lista, msg){
     if(S.mode==="db") await S.db.doc("config/compradores").set({lista, atualizadoEm:new Date().toISOString()});
     else localSave();
     toast(msg);
-  }catch(e){ S.compradores=prev; render(); toast(e?.code==="permission_denied"?"Somente Editores do portal (Suprimentos) podem alterar esta lista.":"Falha ao salvar. Tente novamente."); }
+  }catch(e){ S.compradores=prev; render(); toast(e?.code==="permission_denied"?"Somente Editores do portal (Suprimentos) podem alterar esta lista.":`Falha ao salvar: ${motivoErro(e)}`); }
 }
 document.addEventListener("submit",ev=>{
   if(ev.target.id!=="cfgFrm") return; ev.preventDefault();
@@ -1783,7 +1783,7 @@ async function salvarEdicao(){
     const id=r.id; S.saving=false; S.editId=null; S.draft=null; S.errors=[];
     toast(emRev?`RMS ${fmtNum(id)} reenviada para Suprimentos.`:`RMS ${fmtNum(id)} atualizada · ${ch.length} alteração(ões) registrada(s) no log.`);
     S.pendingOpen=id; location.hash="#minhas";
-  }catch(e){ S.saving=false; S.errors=[{k:"x",m:e?.code==="permission_denied"?"Você não tem permissão para editar esta RMS.":"Falha ao salvar. Tente novamente."}]; render(); }
+  }catch(e){ S.saving=false; S.errors=[{k:"x",m:e?.code==="permission_denied"?"Você não tem permissão para editar esta RMS.":`Falha ao salvar: ${motivoErro(e)}`}]; render(); }
 }
 async function submit(){
   readForm(); const d=S.draft;
@@ -1801,7 +1801,7 @@ async function submit(){
     location.hash="#minhas"; route(); render(); window.scrollTo(0,0);
   }catch(e){
     S.saving=false;
-    S.errors=[{k:"x",m:(e?.code==="permission_denied"?"Seu acesso a este portal é somente leitura. Peça acesso de Colaborador ao responsável.":e?.code==="quota_exceeded"?"A base atingiu o limite de registros. Avise o responsável pelo portal.":(e?.message||"Falha ao salvar. Tente novamente."))}];
+    S.errors=[{k:"x",m:(e?.code==="permission_denied"?"Seu acesso a este portal é somente leitura. Peça acesso de Colaborador ao responsável.":e?.code==="quota_exceeded"?"A base atingiu o limite de registros. Avise o responsável pelo portal.":(e?.message||`Falha ao salvar: ${motivoErro(e)}`))}];
     render();
   }
 }
@@ -1935,13 +1935,15 @@ function viewMinhas(){
 /* ---------- Supabase: base compartilhada fora do claude.ai (GitHub Pages) ---------- */
 /* Tabela única "docs" (col, id, data jsonb). Este adaptador imita a API usada pelo portal: collection().limit().onSnapshot/get, doc().get/set/update/delete/onSnapshot/acquire. */
 const RMS_SUPABASE = { url:"https://mcuglgvkkhzfgdhndlhg.supabase.co", key:"sb_publishable_El4fHBYFXoXOzARwq5_qEw_KMl89fyp" };
-function supaErr(e){ const m=String(e?.message||e||""); const err=new Error(m||"Falha no banco"); if(e?.code==="42501"||/row-level security|permission denied/i.test(m)) err.code="permission_denied"; return err; }
+function supaErr(e){ const m=String(e?.message||e||""); const err=new Error(m||"Falha no banco"); err.detalhe=[e?.code,m,e?.details,e?.hint].filter(Boolean).join(" · "); console.error("Supabase:",e); if(e?.code==="42501"||/row-level security|permission denied/i.test(m)) err.code="permission_denied"; return err; }
+const jwtVenceu = e => /jwt|token.*expir|PGRST30[0-3]|401/i.test(String(e?.code||"")+" "+String(e?.message||""));
+async function comSessao(sb, fn){ let r=await fn(); if(r && r.error && jwtVenceu(r.error)){ try{ await sb.auth.refreshSession(); }catch{} r=await fn(); } return r; }
 function supaDb(sb){
   const split=p=>{ const i=p.lastIndexOf("/"); return [p.slice(0,i), p.slice(i+1)]; };
   const clean=v=>JSON.parse(JSON.stringify(v??{}));
   const W={};
   async function fetchCol(col){ let all=[], from=0;
-    for(;;){ const {data,error}=await sb.from("docs").select("id,data").eq("col",col).range(from,from+999); if(error) throw supaErr(error); all=all.concat(data||[]); if(!data||data.length<1000) break; from+=1000; }
+    for(;;){ const {data,error}=await comSessao(sb,()=>sb.from("docs").select("id,data").eq("col",col).range(from,from+999)); if(error) throw supaErr(error); all=all.concat(data||[]); if(!data||data.length<1000) break; from+=1000; }
     return all; }
   const colSnap=col=>{ const docs=[...W[col].cache.entries()].map(([id,data])=>({id,exists:true,data:()=>data})); return {docs,size:docs.length,empty:!docs.length}; };
   const notify=col=>{ const w=W[col]; if(w&&w.ready) w.ls.forEach(l=>{ try{ l.cb(); }catch(e){ console.error(e); } }); };
@@ -1963,11 +1965,11 @@ function supaDb(sb){
       async get(){ const rows=await fetchCol(col); return {docs:rows.map(r=>({id:r.id,exists:true,data:()=>r.data})), size:rows.length, empty:!rows.length}; } }; return q; },
     doc(path){ const [col,id]=split(path); return {
       id,
-      async get(){ const {data,error}=await sb.from("docs").select("data").eq("col",col).eq("id",id).maybeSingle(); if(error) throw supaErr(error); return {id, exists:!!data, data:()=>data?data.data:undefined}; },
-      async set(v){ const d=clean(v); const {error}=await sb.from("docs").upsert({col,id,data:d,updated_at:new Date().toISOString()}); if(error) throw supaErr(error); local(col,id,d); },
+      async get(){ const {data,error}=await comSessao(sb,()=>sb.from("docs").select("data").eq("col",col).eq("id",id).maybeSingle()); if(error) throw supaErr(error); return {id, exists:!!data, data:()=>data?data.data:undefined}; },
+      async set(v){ const d=clean(v); const {error}=await comSessao(sb,()=>sb.from("docs").upsert({col,id,data:d,updated_at:new Date().toISOString()})); if(error) throw supaErr(error); local(col,id,d); },
       async update(p){ const cur=await this.get(); await this.set({...(cur.exists?cur.data():{}), ...clean(p)}); },
-      async delete(){ const {error}=await sb.from("docs").delete().eq("col",col).eq("id",id); if(error) throw supaErr(error); local(col,id,undefined); },
-      async create(v){ const d=clean(v); const {error}=await sb.from("docs").insert({col,id,data:d}); if(error){ if(error.code==="23505") return false; throw supaErr(error); } local(col,id,d); return true; },
+      async delete(){ const {error}=await comSessao(sb,()=>sb.from("docs").delete().eq("col",col).eq("id",id)); if(error) throw supaErr(error); local(col,id,undefined); },
+      async create(v){ const d=clean(v); const {error}=await comSessao(sb,()=>sb.from("docs").insert({col,id,data:d})); if(error){ if(error.code==="23505") return false; throw supaErr(error); } local(col,id,d); return true; },
       async acquire(){ return {acquired:true}; },
       onSnapshot(cb,err){ const w=watch(col), l={cb:()=>{ const has=w.cache.has(id); cb({id, exists:has, data:()=>has?w.cache.get(id):undefined}); }, err}; w.ls.add(l); if(w.ready) l.cb(); return ()=>w.ls.delete(l); }
     }; }
@@ -2250,6 +2252,7 @@ function almoxUpd(id){ const E=CSS.escape(id), el=$("#afs-"+E); if(!el) return; 
   const dec=L.filter(x=>x.dec).length, e=L.filter(x=>x.dec==="estoque").length, p=L.filter(x=>x.dec==="parcial").length, c=L.filter(x=>x.dec==="compra").length;
   const fim=dec<n?`faltam decidir <strong>${n-dec}</strong> de ${n}`:(p+c===0?`ao concluir: <strong>Atendida pelo estoque</strong> (RMS encerrada)`:`ao concluir: <strong>${p+c}</strong> item(ns) seguem para Suprimentos`);
   el.innerHTML=`<strong>${e}</strong> do estoque · <strong>${p}</strong> parcial · <strong>${c}</strong> p/ compra → ${fim}`; }
+const motivoErro = e => { const d=String(e?.detalhe||e?.message||e||"").trim(); return jwtVenceu(e)?"sua sessão expirou. Clique em Sair e entre de novo.":(d?d.slice(0,160):"sem detalhe"); };
 async function almoxConcluir(id, t){
   const r=S.rms.find(x=>x.id===id), E=CSS.escape(id), L=almoxLer(id); let erro="";
   L.forEach((x,i)=>{ if(!x.dec) erro="Decida todos os itens: Estoque, Compra ou Parcial.";
@@ -2265,8 +2268,10 @@ async function almoxConcluir(id, t){
     notificacoes:[...(cur.notificacoes||[]), {id:`${id}-alm-${Date.now()}`, em:agora, tipo:"almox", titulo:tudo?"Atendida pelo estoque":"Conferida pelo Almoxarifado", texto}] };
   const ev=`Almoxarifado: ${tudo?"atendida pelo estoque":"conferida"} · ${texto}`;
   t.disabled=true; t.textContent="Salvando…";
-  try{ await saveStatus(id, patch, ev); toast(tudo?`RMS ${fmtNum(id)} atendida pelo estoque. Solicitante avisado.`:`RMS ${fmtNum(id)}: ${comp.length} item(ns) liberado(s) para Suprimentos.`); S.openId=null; render(); }
-  catch(e){ t.disabled=false; t.textContent="Concluir conferência"; toast(e?.code==="permission_denied"?"Sem permissão para gravar. O usuário do Almoxarifado precisa de acesso de Editor ao portal.":"Falha ao salvar. Tente novamente."); }
+  try{ await saveStatus(id, patch, ev); }
+  catch(e){ console.error("almoxConcluir",e); t.disabled=false; t.textContent="Concluir conferência"; toast(e?.code==="permission_denied"?"Sem permissão para gravar esta conferência. Confira o perfil do usuário em Configurações.":`Não foi possível salvar a conferência: ${motivoErro(e)}`); return; }
+  toast(tudo?`RMS ${fmtNum(id)} atendida pelo estoque. Solicitante avisado.`:`RMS ${fmtNum(id)}: ${comp.length} item(ns) liberado(s) para Suprimentos.`);
+  try{ S.openId=null; render(); }catch(e){ console.error("render após conferência",e); location.reload(); }
 }
 async function almoxDevolver(id, t){
   const E=CSS.escape(id), m=$("#am-"+E), msg=(m?.value||"").trim();
@@ -2275,7 +2280,7 @@ async function almoxDevolver(id, t){
   t.disabled=true;
   try{ await saveStatus(id,{status:"revisao", revisao:{msg, em, origem:"almox"}, notificacoes:[...(cur.notificacoes||[]), {id:`${id}-rv-${Date.now()}`, em, tipo:"revisao", titulo:"RMS devolvida pelo Almoxarifado", texto:msg}]}, `Devolvida pelo Almoxarifado: "${msg}"`);
     toast(`RMS ${fmtNum(id)} devolvida ao solicitante.`); S.openId=null; render(); }
-  catch(e){ t.disabled=false; toast(e?.code==="permission_denied"?"Sem permissão para gravar. O usuário do Almoxarifado precisa de acesso de Editor ao portal.":"Falha ao salvar. Tente novamente."); }
+  catch(e){ t.disabled=false; toast(e?.code==="permission_denied"?"Sem permissão para gravar. O usuário do Almoxarifado precisa de acesso de Editor ao portal.":`Falha ao salvar: ${motivoErro(e)}`); }
 }
 function almoxInfo(r){ const a=(S.status[r.id]||{}).almox; if(!a?.itens) return "";
   const est=a.itens.map((x,i)=>x.qe>0?`<li>Item ${i+1} · ${esc((r.itens[i]||{}).descricao||"")}: <strong>${String(x.qe).replace(".",",")} ${esc((r.itens[i]||{}).un||"")}</strong> do estoque${x.qc>0?` · ${String(x.qc).replace(".",",")} para compra`:""}</li>`:"").join("");
@@ -2327,7 +2332,7 @@ const quemTxt = id => quemTrava(id) || "outro comprador";
 const travaChip = id => { const t=travaDe(id); return t?`<div class="lockchip" title="Em tratamento por ${esc(quemTxt(id))} desde ${esc(fmtDT(t.desde))}">${LOCK_SVG}Em uso</div>`:""; };
 const travaAviso = (t,id) => `<div class="tf-lock" role="status">${LOCK_SVG}<div><b>Em tratamento por ${esc(quemTxt(id))}</b> desde ${esc(fmtDT(t.desde))}. Você pode consultar; as alterações ficam liberadas quando a RMS for salva ou fechada.</div></div>`;
 const travaUsa = () => S.supa && S.mode==="db" && S.canSup && !!S.sb?.rpc;
-async function travaRpc(fn,rid){ try{ const {data,error}=await S.sb.rpc(fn,{rid}); if(error) throw error; return data; }catch(e){ console.warn(fn,e); return undefined; } }
+async function travaRpc(fn,rid){ try{ const {data,error}=await comSessao(S.sb,()=>S.sb.rpc(fn,{rid})); if(error) throw error; return data; }catch(e){ console.warn(fn,e); return undefined; } }
 async function travar(id){ const t=await travaRpc("rms_travar",id); if(!t) return false;
   if(t.agora) S.relogio=new Date(t.agora).getTime()-Date.now();
   S.travas={...(S.travas||{}), [id]:t}; return t.uid===S.uid; }
@@ -2344,6 +2349,7 @@ async function syncTrava(){ if(S._travaBusy) return; const want=travaDesejada();
   } finally { S._travaBusy=false; }
   if(travaDesejada()!==S._travaPedida) syncTrava(); }
 setInterval(()=>{ if(S.minhaTrava && travaUsa()) travar(S.minhaTrava); },60000);
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden && S.supa && S.sb) S.sb.auth.getSession().catch(()=>{}); });
 addEventListener("pagehide",()=>{ if(!S.minhaTrava || !S.sbToken) return;
   try{ fetch(RMS_SUPABASE.url+"/rest/v1/rpc/rms_liberar",{method:"POST",keepalive:true,headers:{apikey:RMS_SUPABASE.key,Authorization:"Bearer "+S.sbToken,"Content-Type":"application/json"},body:JSON.stringify({rid:S.minhaTrava})}); }catch{} });
 function tratFooter(r){
@@ -2442,7 +2448,7 @@ async function tratSalvar(id, t){
       if(S.mode==="db") await S.db.doc("rms/"+id).update(patch); else { Object.assign(r,patch); localSave(); } Object.assign(r,patch); }
     await saveStatus(id,{status:st,rcPr:rc,dataRcPr:dt,...extra},parts.join(" · "));
     toast(`RMS ${fmtNum(id)} atualizada · ${STATUS[st].label}.`); fechar(); }
-  catch(e){ t.disabled=false; t.textContent="Salvar"; toast(e?.code==="permission_denied"?(S.supa?"Não foi possível salvar: outro comprador está tratando esta RMS ou você não tem permissão.":"Somente Editores do portal (Suprimentos) podem alterar a RMS."):"Falha ao salvar. Tente novamente."); }
+  catch(e){ t.disabled=false; t.textContent="Salvar"; toast(e?.code==="permission_denied"?(S.supa?"Não foi possível salvar: outro comprador está tratando esta RMS ou você não tem permissão.":"Somente Editores do portal (Suprimentos) podem alterar a RMS."):`Falha ao salvar: ${motivoErro(e)}`); }
 }
 /* ---------- Notificações ao solicitante (pop-up no Painel de acompanhamento) ---------- */
 function minhasNotif(){
@@ -2644,7 +2650,7 @@ document.addEventListener("click",async ev=>{
       if(ev.length) await saveStatus(id,stPatch,ev.join(" · "));
       if(dChanged||ev.length) await saveDilig(id,dPatch);
       S.dilEdit=null; S.dilKeep=null; toast(`RMS ${fmtNum(id)}: diligenciamento salvo · ${ENT[entregaOf(r).k].l}.`); render(); window.scrollTo(0,0);
-    }catch(e){ t.disabled=false; toast(e?.code==="permission_denied"?"Somente Editores do portal (Suprimentos) podem diligenciar.":"Falha ao salvar. Tente novamente."); }
+    }catch(e){ t.disabled=false; toast(e?.code==="permission_denied"?"Somente Editores do portal (Suprimentos) podem diligenciar.":`Falha ao salvar: ${motivoErro(e)}`); }
   }
   else if(a==="supf"){ S.supFilter=t.dataset.f; render(); }
   else if(a==="delanx"){ readForm(); const x=S.draft.anexos.splice(+t.dataset.i,1)[0]; render();
@@ -2666,7 +2672,7 @@ document.addEventListener("click",async ev=>{
     const sv=parseInt($("#spot-verde").value,10), sa=parseInt($("#spot-amarelo").value,10);
     if(!(sv>=1&&sa<=120&&sa>sv)){ $("#spot-amarelo").classList.add("err"); toast("Contador Spot: o limite amarelo precisa ser maior que o verde (entre 1 e 120)."); return; } v.spotVerde=sv; v.spotAmarelo=sa;
     const am=parseInt($("#almox-meta")?.value,10); if(!(am>=1&&am<=30)){ $("#almox-meta")?.classList.add("err"); toast("Meta do Almoxarifado: informe de 1 a 30 dias úteis."); return; } v.almoxMeta=am;
-    try{ if(S.mode==="db") await S.db.doc("config/sla").set({...v, atualizadoEm:new Date().toISOString()}); S.sla=v; localSave(); toast("Metas de SLA salvas."); render(); }catch(e){ toast(e?.code==="permission_denied"?"Somente Editores (Suprimentos) podem alterar as metas.":"Falha ao salvar. Tente novamente."); } }
+    try{ if(S.mode==="db") await S.db.doc("config/sla").set({...v, atualizadoEm:new Date().toISOString()}); S.sla=v; localSave(); toast("Metas de SLA salvas."); render(); }catch(e){ toast(e?.code==="permission_denied"?"Somente Editores (Suprimentos) podem alterar as metas.":`Falha ao salvar: ${motivoErro(e)}`); } }
   else if(a==="impfile"){ $("#impIn")?.click(); }
   else if(a==="impmodelo"){ impModelo(); }
   else if(a==="impcancel"){ S.imp=null; render(); }
@@ -2687,11 +2693,11 @@ document.addEventListener("click",async ev=>{
   else if(a==="anconf"){ await marcarVistas([t.dataset.n]); S.openId=t.dataset.id; renderDrawer(); renderAlmNotif(); renderSupNotif(); }
   else if(a==="locadd"){ const el=$("#locNovo"), v=(el.value||"").trim().replace(/\s+/g," "); if(v.length<3){ el.classList.add("err"); toast("Informe o nome do local (mínimo 3 caracteres)."); return; }
     const L=locaisLista(); if(L.some(l=>l.nome.toLowerCase()===v.toLowerCase())){ toast("Esse local já está cadastrado."); return; }
-    try{ await salvarLocais([...L,{nome:v,ativo:true}]); toast(`Local "${v}" cadastrado.`); render(); }catch(e){ toast(e?.code==="permission_denied"?"Sem permissão para alterar os locais.":"Falha ao salvar. Tente novamente."); } }
+    try{ await salvarLocais([...L,{nome:v,ativo:true}]); toast(`Local "${v}" cadastrado.`); render(); }catch(e){ toast(e?.code==="permission_denied"?"Sem permissão para alterar os locais.":`Falha ao salvar: ${motivoErro(e)}`); } }
   else if(a==="loctog"||a==="locdel"){ const i=+t.dataset.i, L=locaisLista().map(l=>({...l}));
     if(a==="locdel"){ if(L.length<=1){ toast("Mantenha pelo menos um local cadastrado."); return; } L.splice(i,1); } else L[i].ativo=L[i].ativo===false;
     if(!L.some(l=>l.ativo!==false)){ toast("Mantenha pelo menos um local ativo."); return; }
-    try{ await salvarLocais(L); toast("Locais de retirada atualizados."); render(); }catch(e){ toast(e?.code==="permission_denied"?"Sem permissão para alterar os locais.":"Falha ao salvar. Tente novamente."); } }
+    try{ await salvarLocais(L); toast("Locais de retirada atualizados."); render(); }catch(e){ toast(e?.code==="permission_denied"?"Sem permissão para alterar os locais.":`Falha ao salvar: ${motivoErro(e)}`); } }
   else if(a==="adec"){ const id=t.dataset.id, i=+t.dataset.i, v=t.dataset.v, E=CSS.escape(id), r=S.rms.find(x=>x.id===id); if(!r) return; const q=+(r.itens[i]||{}).qtd||0;
     $(`#ad-${E}-${i}`).value=v; t.parentElement.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t));
     const qi=$(`#aq-${E}-${i}`); qi.classList.remove("err"); qi.disabled=v!=="parcial"; qi.value = v==="estoque"?q : v==="compra"?0 : (q>1?Math.max(1,Math.floor(q/2)):""); if(v==="parcial"){ qi.focus(); qi.select(); }
@@ -2724,7 +2730,7 @@ document.addEventListener("click",async ev=>{
     t.disabled=true;
     try{ await saveStatus(r.id,{comprados:c,status:st,concluidoEm:all?(cur.concluidoEm&&was==="concluida"?cur.concluidoEm:new Date().toISOString()):null},ev.join(" · "));
       toast(all?`RMS ${fmtNum(r.id)} concluída: todos os itens comprados.`:`Item ${i+1} ${t.checked?"comprado":"desmarcado"}. ${k}/${n} comprados.`); render(); }
-    catch(e){ t.checked=!t.checked; t.disabled=false; toast(e?.code==="permission_denied"?"Somente Editores do portal (Suprimentos) podem marcar itens.":"Falha ao salvar. Tente novamente."); }
+    catch(e){ t.checked=!t.checked; t.disabled=false; toast(e?.code==="permission_denied"?"Somente Editores do portal (Suprimentos) podem marcar itens.":`Falha ao salvar: ${motivoErro(e)}`); }
   }
   else if(a==="supsave"){ tratSalvar(t.dataset.id, t); }
   else if(a==="tstep"){ const k=t.dataset.k, el=$("#st-"+CSS.escape(t.dataset.id)); if(!el) return;
@@ -2955,7 +2961,7 @@ function usuariosPanel(){
     <p class="sub">"Senha temporária" = cadastro novo ou senha resetada, aguardando a pessoa entrar e criar a própria senha. Inativar bloqueia o login sem apagar o histórico.</p>
    </div></section>`;
 }
-async function usrAcao(fn){ try{ await fn(); S.usrErr=""; render(); }catch(e){ console.error(e); toast(e?.code==="permission_denied"?"Somente Suprimentos (Editores) podem alterar usuários.":"Falha ao salvar. Tente novamente."); } }
+async function usrAcao(fn){ try{ await fn(); S.usrErr=""; render(); }catch(e){ console.error(e); toast(e?.code==="permission_denied"?"Somente Suprimentos (Editores) podem alterar usuários.":`Falha ao salvar: ${motivoErro(e)}`); } }
 document.addEventListener("submit", ev=>{
   if(ev.target.id!=="usrFrm") return; ev.preventDefault();
   const f={nome:$("#usrNome").value.trim(), email:$("#usrEmail").value.trim().toLowerCase(), matricula:$("#usrMat").value.trim(), setor:$("#usrSetor").value.trim(), perfil:$("#usrPerfil").value, solicitadoPor:$("#usrSolic").value.trim()};
