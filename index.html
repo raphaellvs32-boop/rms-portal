@@ -2407,7 +2407,7 @@ function tratamentoBox(r){
     <label class="f">Nº da PR<input class="in num" id="rc-${id}" value="${esc(sx.rcPr||"")}" placeholder="Nº da requisição SAP"></label>
     <label class="f">Data da PR<input class="in" type="date" id="dt-${id}" value="${esc(sx.dataRcPr||"")}"></label>
     <div class="f"><span>Aprovação do gerente (RC)</span><div style="padding-top:6px">${rcSituacao(r)}</div></div>
-    <label class="f">Projeto<select class="in" id="pj-${id}">${PROJETOS.map(p=>`<option ${projOf(r)===p?"selected":""}>${p}</option>`).join("")}${projOf(r)==="Não informado"?`<option value="" selected>Não informado</option>`:""}</select></label>
+    <label class="f">Projeto<input class="in" id="pj-${id}" value="${esc(projOf(r))}" readonly disabled title="Informado pelo solicitante na RMS. Para mudar, o solicitante usa Editar RMS." style="background:var(--surface-2);color:var(--fg);cursor:not-allowed"></label>
    </div>
    <div class="body" style="border-top:1px solid var(--line)"><div class="sec-t">Itens · código SAP, tipo de compra, grupo de compras e comprado</div>
     <div class="tw"><table class="codtab trtab"><thead>
@@ -2512,7 +2512,7 @@ async function tratSalvar(id, t){
   const E=CSS.escape(id), r=S.rms.find(x=>x.id===id); if(!r) return;
   { const tv=travaDe(id); if(tv){ toast(`RMS em tratamento por ${quemTxt(id)}. Aguarde a liberação.`); return; } }
   const cur=S.status[id]||{}, parts=[], extra={}, n=(r.itens||[]).length;
-  const rc=$("#rc-"+E).value.trim(), pj=$("#pj-"+E).value, ap=(S.status[id]||{}).dataAprovPr||""; let dt=$("#dt-"+E).value; if(rc && !dt){ dt=today(); $("#dt-"+E).value=dt; }
+  const rc=$("#rc-"+E).value.trim(), pj=projOf(r) /* projeto vem do solicitante: não editável (nota 066) */, ap=(S.status[id]||{}).dataAprovPr||""; let dt=$("#dt-"+E).value; if(rc && !dt){ dt=today(); $("#dt-"+E).value=dt; }
   const {st,k,v}=tratPrev(id), ms=$("#ms-"+E), msg=(ms?.value||"").trim();
   if(ap && dt && ap<dt){ $("#dt-"+E).classList.add("err"); toast("A data da PR não pode ser depois da aprovação da RC."); return; }
   if(ap && !dt){ $("#dt-"+E).classList.add("err"); toast("Informe a data da PR."); return; }
