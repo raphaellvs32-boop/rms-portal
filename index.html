@@ -2076,10 +2076,14 @@ async function bootSupa(){
   S.sb.auth.onAuthStateChange((ev,ses)=>{ if(ev==="PASSWORD_RECOVERY"){ S.auth.recSession=ses; S.auth.modo="recuperar"; S.auth.estado="pendente"; S.auth.erro=""; renderLogin(); } });
   let session=null; try{ ({data:{session}}=await S.sb.auth.getSession()); }catch(e){ console.error(e); }
   if(S.auth.modo==="recuperar") return;
+  /* Lembrar login (nota 073): marcado = 30 dias neste computador; desmarcado = a sessão acaba ao fechar o navegador */
+  const mem=memLer(), lembrar=!!(mem?.ate && Date.parse(mem.ate)>Date.now()), viva=(()=>{ try{ return sessionStorage.getItem("rms-sessao-viva")==="1"; }catch{ return false; } })();
+  if(session && !lembrar && !viva){ try{ await S.sb.auth.signOut(); }catch{} session=null; if(mem?.ate) memGravar({email:mem.email, ate:null}); }
   if(session) return supaPosLogin(session);
-  S.mode="db"; setConn(); S.auth.estado="pendente"; S.auth.modo="login"; const mem=memLer(); if(mem?.email) S.auth.lastEmail=mem.email; renderLogin();
+  S.mode="db"; setConn(); S.auth.estado="pendente"; S.auth.modo="login"; if(mem?.email) S.auth.lastEmail=mem.email; S.auth.mem=lembrar||!!mem?.lembrar; renderLogin();
 }
 async function supaPosLogin(session, opts={}){
+  try{ sessionStorage.setItem("rms-sessao-viva","1"); }catch{}
   const a=S.auth; S.uid=session.user.id; const email=String(session.user.email||"").toLowerCase();
   if(!S.db) S.db=supaDb(S.sb);
   S.mode="db"; setConn();
@@ -2120,6 +2124,7 @@ function loginSupaBody(a, err){
     <form id="lgForm" class="lg-form" novalidate>
       <label class="f">Login (e-mail)<input class="in" id="lgEmail" type="email" autocomplete="username" placeholder="nome@empresa.com.br" value="${esc(a.lastEmail||"")}"></label>
       <label class="f">Senha<span class="lg-pw"><input class="in" id="lgSenha" type="password" autocomplete="current-password"><button type="button" class="btn small" data-act="lgver" aria-label="Mostrar senha">Mostrar</button></span></label>
+      <label class="lg-mem"><input type="checkbox" id="lgMem" ${a.mem?"checked":""}> Lembrar login <small>(${MEM_DIAS} dias neste computador)</small></label>
       ${a.info?`<div class="okbox" role="status"><div>${esc(a.info)}</div></div>`:""}${err}<button class="btn primary lg-btn" type="submit">Entrar</button>
       <div class="lg-links"><button class="btn link" type="button" data-act="lgprimeiro">Primeiro acesso? Criar minha senha</button> · <button class="btn link" type="button" data-act="lgesqueci">Esqueci minha senha</button></div>
     </form>
@@ -2133,7 +2138,8 @@ async function supaSubmit(){
   if(a.modo==="login"){
     const senha=$("#lgSenha").value; if(!email||!senha) return falha("Informe o e-mail e a senha.");
     const {data,error}=await S.sb.auth.signInWithPassword({email, password:senha}); if(error) return falha(supaMsg(error));
-    memGravar({email, ate:null}); return supaPosLogin(data.session);
+    a.mem=!!$("#lgMem")?.checked; memGravar(a.mem?{email, ate:new Date(Date.now()+MEM_DIAS*864e5).toISOString(), lembrar:true}:{email, ate:null});
+    return supaPosLogin(data.session);
   }
   if(a.modo==="primeiro"){
     const senha=$("#lgSenha").value, s2=$("#lgSenha2").value;
