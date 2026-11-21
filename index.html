@@ -1807,7 +1807,7 @@ async function salvarEdicao(){
     else { Object.assign(r,patch); localSave(); }
     Object.assign(r,patch);
     const id=r.id; S.saving=false; S.editId=null; S.draft=null; S.errors=[];
-    toast(emRev?`RMS ${fmtNum(id)} reenviada para Suprimentos.`:`RMS ${fmtNum(id)} atualizada · ${ch.length} alteração(ões) registrada(s) no log.`);
+    toast(emRev?`RMS ${fmtNum(id)} reenviada para ${(S.status[id]||{}).revisao?.origem==="almox"?"o Almoxarifado":"Suprimentos"}.`:`RMS ${fmtNum(id)} atualizada · ${ch.length} alteração(ões) registrada(s) no log.`);
     S.pendingOpen=id; location.hash="#minhas";
   }catch(e){ S.saving=false; S.errors=[{k:"x",m:e?.code==="permission_denied"?"Você não tem permissão para editar esta RMS.":`Falha ao salvar: ${motivoErro(e)}`}]; render(); }
 }
@@ -1823,7 +1823,7 @@ async function submit(){
   try{
     const id=await claimAndSave(body);
     S.saving=false; S.draft=null; S.errors=[]; S.justSent=null; S.lastSent=id; S.openId=null;
-    toast(`RMS ${fmtNum(id)} enviada para Suprimentos.`);
+    toast(`RMS ${fmtNum(id)} enviada para ${body.almox?"o Almoxarifado":"Suprimentos"}.`);
     location.hash="#minhas"; route(); render(); window.scrollTo(0,0);
   }catch(e){
     S.saving=false;
