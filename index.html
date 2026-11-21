@@ -285,9 +285,19 @@ table.dil tr.edit td{background:var(--surface-2);padding:16px}
 .dform .span2r{grid-column:span 2;grid-template-columns:repeat(2,minmax(0,1fr))}
 .dform .span2r .f strong{color:var(--fg);font-size:13.5px;overflow-wrap:anywhere}
 .dform .ilist{display:flex;flex-direction:column;gap:12px}
-.dform .resumo{grid-template-columns:1fr} .dform .resumo .f strong{color:var(--fg);font-size:13.5px;overflow-wrap:anywhere}
+.dform .resumo{grid-template-columns:1fr}
+.dprrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.6fr);gap:10px;align-items:start;padding:8px 0;border-bottom:1px dashed var(--line)} .dprrow:last-of-type{border-bottom:0}
+@media (max-width:900px){ .dprrow{grid-template-columns:1fr 1fr} } .dform .resumo .f strong{color:var(--fg);font-size:13.5px;overflow-wrap:anywhere}
 .dform .rcbox{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent-soft)} .dform .rcbox .pill{white-space:normal}
 .rcsit{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+.prlist{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.pcol{display:flex;flex-direction:column;gap:6px;min-width:0} .pcol>span:first-child{font-size:12.5px;font-weight:600;color:var(--grafite)}
+.prrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,.7fr) minmax(0,1.6fr);gap:12px;align-items:start;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.prrow.prnova{border-style:dashed;border-color:var(--accent);background:var(--accent-soft)}
+.prtag{display:inline-block;font:600 12px var(--mono);color:var(--accent-dark);background:var(--accent-soft);border:1px solid var(--accent);border-radius:999px;padding:3px 10px;white-space:nowrap}
+.pendchip{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--sans);color:var(--warn);background:var(--warn-bg);border:1px solid #f0c674;border-radius:999px;padding:3px 10px;text-transform:none;letter-spacing:0}
+.trtab tr.pendrow td{background:#fff8e6} .sn.pend{border-color:#f0c674;color:var(--warn)}
+@media (max-width:900px){ .prrow{grid-template-columns:1fr 1fr} }
 .bulk{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--accent-soft);border:1px dashed var(--accent);border-radius:8px;padding:10px 12px}
 .bulk .in{width:150px} .bulk .sub{flex-basis:100%}
 .icard{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--surface);display:grid;gap:10px}
@@ -543,7 +553,7 @@ const today = () => { const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimez
 const fmtD = iso => { if(!iso) return "—"; const [y,m,d]=String(iso).slice(0,10).split("-"); return d?`${d}/${m}/${y}`:iso; };
 const fmtDT = iso => { if(!iso) return "—"; const d=new Date(iso); return d.toLocaleDateString("pt-BR")+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}); };
 const fmtNum = id => { const [y,n]=String(id).split("-"); return `${n}/${y}`; };
-const buyOf = r => { const c0=(S.status[r.id]?.comprados)||[]; const n=(r.itens||[]).length; const c=(r.itens||[]).map((_,i)=>!!c0[i]||almoxEst(r,i)); const k=c.filter(Boolean).length; return {c,n,k,all:n>0&&k===n,parcial:k>0&&k<n}; };
+const buyOf = r => { const c0=(S.status[r.id]?.comprados)||[]; const n=(r.itens||[]).length; const c=(r.itens||[]).map((_,i)=>!!c0[i]||almoxEst(r,i)||itemPrIdx(r,i)>=0); const k=c.filter(Boolean).length; return {c,n,k,all:n>0&&k===n,parcial:k>0&&k<n}; };
 /* Dias úteis: segunda a sexta, sem feriados nacionais (Carnaval e Corpus Christi são ponto facultativo e não entram). */
 const FERIADOS_FIXOS=["01-01","04-21","05-01","09-07","10-12","11-02","11-15","11-20","12-25"];
 const _fer={};
@@ -579,14 +589,27 @@ const qLabel = q => { const [y,t]=q.split("-"); return y==="0000"?"s/ data":`${t
 const dDiff = (a,b) => (a&&b) ? diasUteis(a,b) : null; /* prazos em dias úteis */
 const diasAprovPr = r => { const sx=S.status[r.id]||{}; return dDiff(sx.dataRcPr, sx.dataAprovPr); };
 /* PR criada por Suprimentos nasce BLOQUEADA; só fica liberada quando o Diligenciamento informa a RC (nº + data de aprovação do gerente) — nota 059 */
-const prBloq = r => { const sx=S.status[r.id]||{}; return !!String(sx.rcPr||"").trim() && !sx.dataAprovPr; };
-const diasGerente = r => { const sx=S.status[r.id]||{}; if(!sx.dataRcPr) return null; return sx.dataAprovPr ? dDiff(sx.dataRcPr, sx.dataAprovPr) : dDiff(sx.dataRcPr, today()); };
+/* Várias PRs por RMS (nota 067): status.prs=[{pr,data,rc,aprov,itens:[i…]}]. Os campos antigos (rcPr, dataRcPr, rcNum, dataAprovPr) espelham a 1ª PR. */
+function prsOf(r){ const sx=S.status[r.id]||{}; if(Array.isArray(sx.prs)) return sx.prs.filter(p=>String(p.pr||"").trim());
+  if(!String(sx.rcPr||"").trim()) return [];
+  const n=(r.itens||[]).length, c=sx.comprados||[]; let it=[...Array(n).keys()].filter(i=>!almoxEst(r,i)); const marc=it.filter(i=>c[i]); if(marc.length) it=marc;
+  return [{pr:String(sx.rcPr).trim(), data:sx.dataRcPr||"", rc:sx.rcNum||"", aprov:sx.dataAprovPr||"", itens:it}]; }
+const itemPrIdx = (r,i) => prsOf(r).findIndex(p=>(p.itens||[]).includes(i));
+const pendentesOf = r => (r.itens||[]).map((_,i)=>i).filter(i=>!almoxEst(r,i) && itemPrIdx(r,i)<0);
+const temPendente = r => prsOf(r).length>0 && pendentesOf(r).length>0 && !isNeg(r.id) && !isFinal(r.id);
+const prsSync = prs => { const a=prs[0]||{}; return {prs, rcPr:a.pr||"", dataRcPr:a.data||"", rcNum:a.rc||"", dataAprovPr:a.aprov||""}; };
+const diasGerentePr = p => !p.data ? null : p.aprov ? dDiff(p.data, p.aprov) : dDiff(p.data, today());
+const prBloq = r => prsOf(r).some(p=>!p.aprov);
+const diasGerente = r => { const P=prsOf(r); if(!P.length) return null; const ab=P.filter(p=>!p.aprov); const L=(ab.length?ab:P).map(diasGerentePr).filter(v=>v!=null); return L.length?Math.max(...L):null; };
 /* farol do tempo com o gerente (nota 060): até 5 dias verde · 6 e 7 amarelo · mais de 7 vermelho */
 const GER_FAROL = { verde:5, amarelo:7 };
 const farolGer = d => d==null ? "verde" : d<=GER_FAROL.verde ? "verde" : d<=GER_FAROL.amarelo ? "amarelo" : "vermelho";
 const farolGerTxt = d => `<span class="farol f-${farolGer(d)}" title="Farol do gerente: até ${GER_FAROL.verde} dias verde · ${GER_FAROL.verde+1} a ${GER_FAROL.amarelo} amarelo · acima de ${GER_FAROL.amarelo} vermelho"><i></i>${d??0} d</span>`;
+function rcSituacaoPr(p){ const d=diasGerentePr(p), tip=`Farol do gerente: até ${GER_FAROL.verde} dias verde · ${GER_FAROL.verde+1} a ${GER_FAROL.amarelo} amarelo · acima de ${GER_FAROL.amarelo} vermelho`;
+  return !p.aprov ? `<span class="rcsit"><span class="pill e-bloq">Bloqueada</span><span class="farol f-${farolGer(d)}" title="${tip}"><i></i>com o gerente há ${d??0} dia(s) útil(eis)</span></span>`
+    : `<span class="rcsit"><span class="pill e-ok">RC ${esc(p.rc||"")} · liberada em ${fmtD(p.aprov)}</span><span class="farol f-${farolGer(d)}" title="${tip}"><i></i>${d??0} dia(s) útil(eis) com o gerente</span></span>`; }
 function rcSituacao(r){ const sx=S.status[r.id]||{}, d=diasGerente(r);
-  if(!String(sx.rcPr||"").trim()) return `<span class="pill e-sem">Aguardando a PR de Suprimentos</span>`;
+  if(!prsOf(r).length) return `<span class="pill e-sem">Aguardando a PR de Suprimentos</span>`;
   const tip=`Farol do gerente: até ${GER_FAROL.verde} dias verde · ${GER_FAROL.verde+1} a ${GER_FAROL.amarelo} amarelo · acima de ${GER_FAROL.amarelo} vermelho`;
   if(prBloq(r)) return `<span class="rcsit"><span class="pill e-bloq">Bloqueada</span><span class="farol f-${farolGer(d)}" title="${tip}"><i></i>com o gerente há ${d??0} dia(s) útil(eis)</span></span>`;
   return `<span class="rcsit"><span class="pill e-ok">Liberada em ${fmtD(sx.dataAprovPr)}</span><span class="farol f-${farolGer(d)}" title="${tip}"><i></i>${d??0} dia(s) útil(eis) com o gerente</span></span>`; }
@@ -801,13 +824,14 @@ function viewLista(onlyMine){
 function viewSup(){
   const base=S.rms.filter(r=>!foraSup(r.id)||emergAlmox(r)); const c=counts(base); c.analise+=c.almox;
   const nSpot=spotAbertos(base).length;
-  const l=sorted(base.filter(r=>S.supFilter==="todas"||(S.supFilter==="spot"?isSpot(r)&&!isFinal(r.id):S.supFilter==="analise"?(stOf(r.id)==="analise"||emergAlmox(r)):stOf(r.id)===S.supFilter))).sort((a,b)=>{ if(S.supFilter==="spot") return diasSup(b)-diasSup(a); const da=isFinal(a.id), db=isFinal(b.id); if(da!==db) return da?1:-1; if(da) return chegada(b).localeCompare(chegada(a));
+  const nPend=base.filter(temPendente).length;
+  const l=sorted(base.filter(r=>S.supFilter==="todas"||(S.supFilter==="pend"?temPendente(r):S.supFilter==="spot"?isSpot(r)&&!isFinal(r.id):S.supFilter==="analise"?(stOf(r.id)==="analise"||emergAlmox(r)):stOf(r.id)===S.supFilter))).sort((a,b)=>{ if(S.supFilter==="spot") return diasSup(b)-diasSup(a); const da=isFinal(a.id), db=isFinal(b.id); if(da!==db) return da?1:-1; if(da) return chegada(b).localeCompare(chegada(a));
     const na=ehNova(a), nb=ehNova(b); return na!==nb?(na?-1:1):(prOf(a).ord-prOf(b).ord)||chegada(b).localeCompare(chegada(a)); });
   S._supBase=l; const lf=colAplicar(l);
   const pg=paginar("sup", lf, S.supFilter+"|"+JSON.stringify(S.supCol));
   return `<div class="head"><div><h2>Fila de compras</h2><p>Clique na RMS para abrir em tela cheia: informe o nº da PR, o grupo de compras, o tipo de compra, marque os itens comprados e atualize o status. O solicitante vê a mudança na hora.</p></div></div>
   <section class="panel"><header><div class="seg" role="group" aria-label="Fila">
-    ${[["analise",`Em análise (${c.analise})`],["atendimento",`Em compra (${c.atendimento})`],["pedido",`Pedido emitido (${c.pedido})`],["parcial",`Entrega parcial (${c.parcial})`],["concluida",`Entregue (${c.concluida})`],["cancelado",`Cancelado (${c.cancelado})`],["recusado",`Recusado (${c.recusado})`],["revisao",`Em revisão (${c.revisao})`],["spot",`Spot em aberto (${nSpot})`],["todas",`Todas (${c.total})`]].map(([k,t])=>`<button data-act="supf" data-f="${k}" aria-pressed="${S.supFilter===k}">${t}</button>`).join("")}
+    ${[["analise",`Em análise (${c.analise})`],["atendimento",`Em compra (${c.atendimento})`],["pedido",`Pedido emitido (${c.pedido})`],["parcial",`Entrega parcial (${c.parcial})`],["concluida",`Entregue (${c.concluida})`],["cancelado",`Cancelado (${c.cancelado})`],["recusado",`Recusado (${c.recusado})`],["revisao",`Em revisão (${c.revisao})`],["pend",`Itens sem PR (${nPend})`],["spot",`Spot em aberto (${nSpot})`],["todas",`Todas (${c.total})`]].map(([k,t])=>`<button data-act="supf" data-f="${k}" aria-pressed="${S.supFilter===k}">${t}</button>`).join("")}
   </div>${S.supFilter==="spot"?spotLegenda():farolLegenda()}</header>
   ${colChips()}
   ${loadingOr(!l.length?`<div class="empty">Nenhuma RMS nesta fila.</div>`:`<div class="tw"><table><thead><tr>${SUP_COLS.map(colTh).join("")}</tr></thead><tbody>
@@ -816,9 +840,9 @@ function viewSup(){
     return `<tr class="click" data-act="open" data-id="${esc(r.id)}" tabindex="0"><td class="num"><strong style="color:var(--info);text-decoration:underline">${esc(fmtNum(r.id))}</strong>${travaChip(r.id)}<div style="font-size:11px;color:${r.encaminhadoEm?"var(--accent-dark)":"var(--muted)"}">${r.encaminhadoEm?"✓ e-mail enviado":"sem e-mail"}</div>${emergAlmox(r)?`<div><span class="pill st-almox" style="font-size:10.5px">em conferência no Almoxarifado</span></div>`:""}${ehNova(r)?`<div><span class="nova">NOVA</span></div>`:""}</td>
     <td>${prChip(r)}</td><td><span class="chip">${esc(r.tipo)}</span></td><td>${esc(r.solicitante?.nome)}<br><span class="num" style="color:var(--muted);font-size:12px">${esc(r.solicitante?.matricula)}</span></td>
     <td class="num" style="${late?"color:var(--bad);font-weight:600":""}">${fmtD(nec)}${late?" · atrasada":""}</td><td>${diasCell(r)}</td><td>${spotCell(r)}</td>
-    <td class="num">${esc(sx.rcPr||"—")}<div class="sub">${fmtD(sx.dataRcPr)}</div></td>
+    <td class="num">${esc(sx.rcPr||"—")}${prsOf(r).length>1?` <span class="sub" style="display:inline;margin:0">+${prsOf(r).length-1}</span>`:""}<div class="sub">${fmtD(sx.dataRcPr)}</div></td>
     <td>${esc(grupoLabel(sx)||"—")}</td><td>${sx.tipoCompra?`<span class="chip">${esc(sx.tipoCompra)}</span>`:"—"}</td>
-    <td class="num">${buyOf(r).k}/${buyOf(r).n}</td><td>${pillOf(r)}</td></tr>`;}).join("")}
+    <td class="num">${buyOf(r).k}/${buyOf(r).n}${temPendente(r)?`<div><span class="pendchip" style="margin-top:4px" title="Itens sem PR: ${pendentesOf(r).map(i=>i+1).join(", ")}">${pendentesOf(r).length} sem PR</span></div>`:""}</td><td>${pillOf(r)}</td></tr>`;}).join("")}
   </tbody></table></div>${pg.html}`)}</section>`;
 }
 
@@ -957,7 +981,7 @@ function dilForm(r){
   const card=(it,i)=>{ const x=L[i]||{qtd:+it.qtd||0}, k=`${id}-${i}`, en=itemEnt(x);
     return `<div class="icard" data-item="${i}">
      <div class="ihead"><label class="isel"><input type="checkbox" class="selit" data-i="${i}" aria-label="Selecionar item ${i+1}"></label>
-      <div class="idesc"><strong>Item ${i+1}</strong> · <span class="num">${nfmt(x.qtd)} ${esc(it.un||"")}</span>${it.codigo?` · <span class="num">${esc(it.codigo)}</span>`:""}<div>${esc(it.descricao)}</div></div>
+      <div class="idesc"><strong>Item ${i+1}</strong> · <span class="num">${nfmt(x.qtd)} ${esc(it.un||"")}</span>${it.codigo?` · <span class="num">${esc(it.codigo)}</span>`:""}${(()=>{ const q=itemPrIdx(r,i), pp=prsOf(r)[q]; return pp?` · <span class="prtag">PR ${esc(pp.pr)}${pp.aprov?"":" · bloqueada"}</span>`:(!almoxEst(r,i)&&prsOf(r).length?` · <span class="pendchip">sem PR</span>`:""); })()}<div>${esc(it.descricao)}</div></div>
       <span id="sit-${k}">${sitPill(itemSit(x))}</span></div>
      <div class="igrid">
       <label class="f">Nº Pedido<input class="in num" id="ipd-${k}" data-f="pedido" data-ic="${k}" value="${esc(x.pedido||"")}"></label>
@@ -970,14 +994,15 @@ function dilForm(r){
       <label class="f span8">Obs. do item<input class="in" id="iob-${k}" data-f="obs" value="${esc(x.obs||"")}" placeholder="Prazo negociado, contato, pendência deste item…"></label>
      </div></div>`; };
   return `<div class="dform">
-   <fieldset><legend>Requisição (PR) · Suprimentos</legend>
-    <label class="f">Nº PR<input class="in num" id="pr-${id}" value="${esc(sx.rcPr||"")}"></label>
-    <label class="f">Data da PR<input class="in" type="date" id="dpr-${id}" value="${esc(sx.dataRcPr||"")}"></label>
-    <div class="full sub" style="margin:0">Preenchidos por Suprimentos no tratamento da RMS.</div></fieldset>
-   <fieldset class="rcbox"><legend>Aprovação do gerente (RC)</legend>
-    <label class="f">Nº RC<input class="in num" id="rcn-${id}" value="${esc(sx.rcNum||"")}" placeholder="Após a liberação"></label>
-    <label class="f">Data de aprovação da RC<input class="in" type="date" id="dap-${id}" value="${esc(sx.dataAprovPr||"")}"></label>
-    <div class="full">${rcSituacao(r)}</div></fieldset>
+   <fieldset class="rcbox span2r" style="grid-template-columns:1fr"><legend>Requisições (PR) e aprovação do gerente (RC)</legend>
+    ${prsOf(r).length?prsOf(r).map((p,k)=>`<div class="dprrow">
+      <div class="f pcol"><span>Nº PR ${k+1}</span><strong class="num">${esc(p.pr)}</strong><small class="sub" style="margin:0">${fmtD(p.data)} · itens ${(p.itens||[]).map(i=>i+1).join(", ")}</small></div>
+      <label class="f">Nº RC<input class="in num" id="rcn-${id}-${k}" value="${esc(p.rc||"")}" placeholder="Após a liberação"></label>
+      <label class="f">Aprovação da RC<input class="in" type="date" id="dap-${id}-${k}" value="${esc(p.aprov||"")}"></label>
+      <div class="f pcol"><span>Situação</span><div style="padding-top:4px">${rcSituacaoPr(p)}</div></div></div>`).join("")
+     :`<div>${rcSituacao(r)}</div>`}
+    ${temPendente(r)?`<div class="pendchip" style="justify-self:start">${pendentesOf(r).length} item(ns) ainda sem PR: ${pendentesOf(r).map(i=>i+1).join(", ")} · aguardando Suprimentos</div>`:""}
+    <div class="sub" style="margin:0">Nº e data da PR vêm do tratamento de Suprimentos. Cada PR nasce bloqueada e só é liberada quando a RC é informada aqui.</div></fieldset>
    <fieldset class="resumo"><legend>Resumo da RMS</legend>
     <div class="f"><span>Pedidos</span><strong class="num">${pedidosOf(r).length?esc(pedidosOf(r).join(", ")):"—"}</strong></div>
     <div class="f"><span>Fornecedores</span><strong>${fornecedoresOf(r).length?esc(fornecedoresOf(r).join(", ")):"—"}</strong></div>
@@ -1064,8 +1089,9 @@ function indCalc(L){
   const ent=by("entregue"), nao=by("nao"), parc=by("parcial");
   const canc=L.filter(r=>stOf(r.id)==="cancelado").length, recus=L.filter(r=>stOf(r.id)==="recusado").length;
   const bloq=L.filter(r=>!isFinal(r.id)&&prBloq(r)).sort((a,b)=>(diasGerente(b)||0)-(diasGerente(a)||0));
+  const prsBloq=bloq.flatMap(r=>prsOf(r).filter(p=>!p.aprov).map(p=>({r,p,d:diasGerentePr(p)}))).sort((a,b)=>(b.d||0)-(a.d||0));
   const lts=L.map(r=>({r,d:leadTime(r)})).filter(x=>x.d!=null).sort((a,b)=>b.d-a.d);
-  const aprov=L.map(diasAprovPr).filter(v=>v!=null), ped=L.map(diasPedido).filter(v=>v!=null);
+  const aprov=L.flatMap(r=>prsOf(r).filter(p=>p.aprov&&p.data).map(p=>dDiff(p.data,p.aprov))).filter(v=>v!=null), ped=L.map(diasPedido).filter(v=>v!=null);
   const spotPr=ativos.filter(r=>(S.status[r.id]||{}).tipoCompra==="Spot"&&(S.status[r.id]||{}).rcPr);
   const spotSem=spotPr.filter(r=>!pedidosOf(r).length);
   // SLA: dias úteis da emissão da RMS até o primeiro pedido de compra
@@ -1087,7 +1113,7 @@ function indCalc(L){
   // fornecedores
   const forn={}; comPed.forEach(r=>dItens(r).forEach(x=>{ const p=x.qtd-itemEnt(x); if(x.pedido&&p>0){ const f=x.fornecedor||"Sem fornecedor informado", o=(forn[f]=forn[f]||{q:0,ps:new Set()}); o.q+=p; o.ps.add(x.pedido); } }));
   const fornRank=Object.entries(forn).map(([f,o])=>({f,n:o.ps.size,q:o.q})).sort((a,b)=>b.n-a.n||b.q-a.q);
-  return {L, ativos, analisadas, comPed, allPeds, ent, nao, parc, canc, recus, bloq, lts, aprov, ped, spotPr, spotSem, sla, slaOk, slaFora,
+  return {L, ativos, analisadas, comPed, allPeds, ent, nao, parc, canc, recus, bloq, prsBloq, lts, aprov, ped, spotPr, spotSem, sla, slaOk, slaFora,
     slaPct:(slaOk+slaFora)?slaOk/(slaOk+slaFora)*100:null, inc, qE, qT, fornRank, totPed:allPeds.length,
     media:avgN(ltRows(L).map(x=>x.d)), ltN:ltRows(L).length, mAprov:avgN(aprov), mPed:avgN(ped), spotPct:spotPr.length?spotSem.length/spotPr.length*100:null};
 }
@@ -1264,13 +1290,13 @@ function viewIndicadores(){
   ${panel("Pedidos Spot em aberto",`contador Spot · verde até ${spotLim().verde} d, amarelo até ${spotLim().amarelo} d`,spotPanel())}
   <div class="dash">
    ${panel("PRs bloqueadas por projeto",`${bloq.length} PR(s) aguardando liberação`,donut)}
-   ${panel("PRs bloqueadas · aguardando o gerente",`${bloq.length} PR(s) · mais antigas primeiro`,bloq.length?`<div class="tw"><table><thead><tr><th>Nº RMS</th><th>Nº PR</th><th>Projeto</th><th>Data da PR</th><th class="r">Dias com o gerente</th></tr></thead><tbody>
-   ${(S._pgB=paginar("ind-bloq",bloq,indSig())).items.map(r=>{ const d=diasGerente(r)||0, k=farolGer(d); return `<tr class="click" data-act="open" data-id="${esc(r.id)}"><td class="num">${esc(fmtNum(r.id))}</td><td class="num">${esc((S.status[r.id]||{}).rcPr||"—")}</td><td>${esc(projOf(r))}</td><td class="num">${fmtD((S.status[r.id]||{}).dataRcPr)}</td><td class="r"><span class="farol f-${k}"><i></i>${d} d</span></td></tr>`; }).join("")}</tbody></table></div>${S._pgB.html}`:empty("Nenhuma PR bloqueada no período."))}
+   ${panel("PRs bloqueadas · aguardando o gerente",`${c.prsBloq.length} PR(s) · mais antigas primeiro`,c.prsBloq.length?`<div class="tw"><table><thead><tr><th>Nº RMS</th><th>Nº PR</th><th>Itens</th><th>Projeto</th><th>Data da PR</th><th class="r">Dias com o gerente</th></tr></thead><tbody>
+   ${(S._pgB=paginar("ind-bloq",c.prsBloq,indSig())).items.map(({r,p,d})=>`<tr class="click" data-act="open" data-id="${esc(r.id)}"><td class="num">${esc(fmtNum(r.id))}</td><td class="num">${esc(p.pr)}</td><td class="num">${(p.itens||[]).map(i=>i+1).join(", ")}</td><td>${esc(projOf(r))}</td><td class="num">${fmtD(p.data)}</td><td class="r"><span class="farol f-${farolGer(d||0)}"><i></i>${d||0} d</span></td></tr>`).join("")}</tbody></table></div>${S._pgB.html}`:empty("Nenhuma PR bloqueada no período."))}
   </div>
-  ${(()=>{ const ap=L.filter(r=>(S.status[r.id]||{}).dataAprovPr && (S.status[r.id]||{}).dataRcPr).map(r=>({r,d:diasGerente(r)})).filter(x=>x.d!=null).sort((a,b)=>b.d-a.d);
+  ${(()=>{ const ap=L.flatMap(r=>prsOf(r).filter(p=>p.aprov&&p.data).map(p=>({r,p,d:diasGerentePr(p)}))).filter(x=>x.d!=null).sort((a,b)=>b.d-a.d);
     const pg=paginar("ind-ger",ap,indSig());
     return panel("Tempo da PR com o gerente (PRs aprovadas)",ap.length?`${ap.length} PR(s) · média ${fdN(avgN(ap.map(x=>x.d)))} · maior ${fdN(ap[0].d)}`:"",ap.length?`<div class="tw"><table><thead><tr><th>Nº RMS</th><th>Nº PR</th><th>Criação da PR</th><th>Nº RC</th><th>Aprovação da RC</th><th>Projeto</th><th class="r">Dias com o gerente</th></tr></thead><tbody>
-      ${pg.items.map(({r,d})=>{ const sx=S.status[r.id]||{}, k=farolGer(d); return `<tr class="click" data-act="open" data-id="${esc(r.id)}"><td class="num">${esc(fmtNum(r.id))}</td><td class="num">${esc(sx.rcPr||"—")}</td><td class="num">${fmtD(sx.dataRcPr)}</td><td class="num">${esc(sx.rcNum||"—")}</td><td class="num">${fmtD(sx.dataAprovPr)}</td><td>${esc(projOf(r))}</td><td class="r"><span class="farol f-${k}"><i></i>${d} d</span></td></tr>`; }).join("")}</tbody></table></div>${pg.html}<p class="sub" style="margin:8px 0 0">Dias úteis entre a criação da PR (Suprimentos) e a aprovação da RC pelo gerente (Diligenciamento). Farol: verde até 5 dias · amarelo 6 e 7 dias · vermelho acima de 7 dias.</p>`:empty("Nenhuma RC aprovada no período. Informe a RC no Diligenciamento."));
+      ${pg.items.map(({r,p,d})=>{ const k=farolGer(d); return `<tr class="click" data-act="open" data-id="${esc(r.id)}"><td class="num">${esc(fmtNum(r.id))}</td><td class="num">${esc(p.pr)}</td><td class="num">${fmtD(p.data)}</td><td class="num">${esc(p.rc||"—")}</td><td class="num">${fmtD(p.aprov)}</td><td>${esc(projOf(r))}</td><td class="r"><span class="farol f-${k}"><i></i>${d} d</span></td></tr>`; }).join("")}</tbody></table></div>${pg.html}<p class="sub" style="margin:8px 0 0">Dias úteis entre a criação da PR (Suprimentos) e a aprovação da RC pelo gerente (Diligenciamento). Farol: verde até 5 dias · amarelo 6 e 7 dias · vermelho acima de 7 dias.</p>`:empty("Nenhuma RC aprovada no período. Informe a RC no Diligenciamento."));
   })()}
   ${panel("Pedidos emitidos e entregues por trimestre",`${tot} pedido(s) · ${ent.length} entregue(s)`,lineTrim(c))}
   ${panel("Lead time por tipo de compra e projeto","quadro dinâmico · PR → entrega do pedido",ltQuadro(L))}
@@ -1360,7 +1386,7 @@ async function gerarPdf(){
   else { doc.setFontSize(8.5); doc.setTextColor(...MUT); doc.text("Nenhum pedido com entrega pendente.",M,y); y+=8; }
   // listas de atenção
   titulo("PRs bloqueadas");
-  if(c.bloq.length) tabela(["Nº RMS","Nº PR","Projeto","Data da PR","Dias com o gerente"], c.bloq.map(r=>[fmtNum(r.id),(S.status[r.id]||{}).rcPr||"—",projOf(r),fmtD((S.status[r.id]||{}).dataRcPr),diasGerente(r)??"—"]));
+  if(c.prsBloq.length) tabela(["Nº RMS","Nº PR","Itens","Data da PR","Dias com o gerente"], c.prsBloq.map(({r,p,d})=>[fmtNum(r.id),p.pr,(p.itens||[]).map(i=>i+1).join(", "),fmtD(p.data),d??"—"]));
   else { doc.setFontSize(8.5); doc.setTextColor(...MUT); doc.text("Nenhuma PR bloqueada.",M,y); y+=8; }
   { const A=spotAbertos(S.rms.filter(passaFiltro)).map(r=>({r,d:diasSup(r),sx:S.status[r.id]||{}})).sort((a,b)=>b.d-a.d), lim=spotLim();
     titulo(`Pedidos Spot em aberto (verde até ${lim.verde} d, amarelo até ${lim.amarelo} d, vermelho acima)`);
@@ -2403,23 +2429,31 @@ function tratamentoBox(r){
   const grupos=S.compradores.filter(c=>c.grupo);
   const tcSel=(idAttr,v,todos)=>`<select class="in" id="${idAttr}" aria-label="Tipo de compra"><option value="">${todos?"Todos…":"Selecione"}</option>${TIPO_COMPRA.map(t=>`<option ${!todos&&v===t?"selected":""}>${t}</option>`).join("")}</select>`;
   return `<section class="panel trat"><header><h3>Tratamento de Suprimentos</h3><span style="color:var(--muted);font-size:12.5px">${grupos.length?"":"Cadastre grupos de compras em Configurações para escolher da lista · "}Visível só para Suprimentos</span></header>
-   <div class="body grid g4">
-    <label class="f">Nº da PR<input class="in num" id="rc-${id}" value="${esc(sx.rcPr||"")}" placeholder="Nº da requisição SAP"></label>
-    <label class="f">Data da PR<input class="in" type="date" id="dt-${id}" value="${esc(sx.dataRcPr||"")}"></label>
-    <div class="f"><span>Aprovação do gerente (RC)</span><div style="padding-top:6px">${rcSituacao(r)}</div></div>
+   <div class="body"><div class="sec-t" style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><span>Requisições (PR) desta RMS</span>${temPendente(r)?`<span class="pendchip">${pendentesOf(r).length} item(ns) sem PR: ${pendentesOf(r).map(i=>i+1).join(", ")}</span>`:""}</div>
+    <div class="prlist">${prsOf(r).map((p,k)=>`<div class="prrow"><label class="f">Nº da PR ${k+1}<input class="in num" id="prn-${id}-${k}" value="${esc(p.pr)}" title="Para retirar esta PR, apague o número e salve"></label>
+      <label class="f">Data da PR<input class="in" type="date" id="prd-${id}-${k}" value="${esc(p.data||"")}"></label>
+      <div class="f pcol"><span>Itens desta PR</span><strong class="num" style="padding-top:8px">${(p.itens||[]).map(i=>i+1).join(", ")||"—"}</strong></div>
+      <div class="f pcol"><span>Aprovação do gerente (RC)</span><div style="padding-top:6px">${rcSituacaoPr(p)}</div></div></div>`).join("")}
+     ${!prsOf(r).length||pendentesOf(r).length?`<div class="prrow prnova"><label class="f">${prsOf(r).length?"Nova PR · itens pendentes":"Nº da PR"}<input class="in num" id="rc-${id}" value="" placeholder="Nº da requisição SAP"></label>
+      <label class="f">Data da PR<input class="in" type="date" id="dt-${id}" value=""></label>
+      <div class="f pcol" style="grid-column:span 2"><span>&nbsp;</span><span class="sub" style="margin:0;padding-top:4px;font-family:var(--sans);text-transform:none;letter-spacing:0">${prsOf(r).length?"Marque na tabela os itens desta PR (coluna PR). Sem marcar, ela vale para todos os itens pendentes.":"Vale para os itens marcados na coluna PR. Sem marcar, vale para todos os itens."} A data é preenchida sozinha ao digitar o número.</span></div></div>`:""}</div>
+   </div>
+   <div class="body grid g4" style="border-top:1px solid var(--line)">
     <label class="f">Projeto<input class="in" id="pj-${id}" value="${esc(projOf(r))}" readonly disabled title="Informado pelo solicitante na RMS. Para mudar, o solicitante usa Editar RMS." style="background:var(--surface-2);color:var(--fg);cursor:not-allowed"></label>
    </div>
    <div class="body" style="border-top:1px solid var(--line)"><div class="sec-t">Itens · código SAP, tipo de compra, grupo de compras e comprado</div>
     <div class="tw"><table class="codtab trtab"><thead>
-     <tr><th style="width:48px">Item</th><th style="width:96px" class="r">Qtd</th><th>Descrição (não editável)</th><th style="width:150px">Código SAP</th><th style="width:150px">Tipo de compra</th><th style="width:210px">Grupo de compras</th><th style="width:110px">Comprado</th></tr>
+     <tr><th style="width:48px">Item</th><th style="width:96px" class="r">Qtd</th><th>Descrição (não editável)</th><th style="width:150px">Código SAP</th><th style="width:150px">Tipo de compra</th><th style="width:210px">Grupo de compras</th><th style="width:150px">PR</th></tr>
      ${(r.itens||[]).length>1?`<tr class="tr-all"><th colspan="4" class="r">Aplicar a todos os itens</th><th>${tcSel(`ta-tc-${id}`,"",true)}</th><th>${grupoSel(`ta-gp-${id}`,"","",grupos,true)}</th><th><label class="sn"><input type="checkbox" id="ta-cp-${id}" ${bb.all?"checked":""} ${neg?"disabled":""}> <span>Todos</span></label></th></tr>`:""}
     </thead><tbody>
     ${(r.itens||[]).map((it,i)=>{ const t=trItem(sx,i), g=t.grupo??sx.grupo, c=t.grupo!=null?t.comprador:sx.comprador, on=!!bb.c[i], al=almoxIt(r,i), est=almoxEst(r,i);
-      return `<tr class="${est?"est":""}"><td class="num">${i+1}</td><td class="num r">${al&&!est&&al.qc<(+it.qtd||0)?`${esc(String(al.qc).replace(".",","))} ${esc(it.un||"")}<div class="sub" style="margin:0">de ${esc(String(it.qtd).replace(".",","))}</div>`:`${esc(String(it.qtd).replace(".",","))} ${esc(it.un||"")}`}</td><td class="ro">${esc(it.descricao)}</td>
+      return `<tr class="${est?"est":itemPrIdx(r,i)<0&&prsOf(r).length&&!neg?"pendrow":""}"><td class="num">${i+1}</td><td class="num r">${al&&!est&&al.qc<(+it.qtd||0)?`${esc(String(al.qc).replace(".",","))} ${esc(it.un||"")}<div class="sub" style="margin:0">de ${esc(String(it.qtd).replace(".",","))}</div>`:`${esc(String(it.qtd).replace(".",","))} ${esc(it.un||"")}`}</td><td class="ro">${esc(it.descricao)}</td>
       <td><input class="in num" id="cd-${id}-${i}" value="${esc(it.codigo||"")}" placeholder="Código SAP" aria-label="Código do material item ${i+1}"></td>
       <td>${tcSel(`tc-${id}-${i}`, t.tipoCompra??sx.tipoCompra)}</td>
       <td>${grupoSel(`gp-${id}-${i}`, g, c, grupos)}</td>
-      <td>${est?`<label class="sn on" title="Atendido pelo Almoxarifado"><input type="checkbox" id="cp-${id}-${i}" checked disabled aria-label="Item ${i+1} atendido pelo estoque"> <span>Estoque</span></label>`:`<label class="sn ${on?"on":""}"><input type="checkbox" id="cp-${id}-${i}" ${on?"checked":""} ${neg?"disabled":""} aria-label="Item ${i+1} comprado"> <span>${on?"Sim":"Não"}</span></label>`}</td></tr>`; }).join("")}
+      <td>${est?`<label class="sn on" title="Atendido pelo Almoxarifado"><input type="checkbox" id="cp-${id}-${i}" checked disabled aria-label="Item ${i+1} atendido pelo estoque"> <span>Estoque</span></label>`
+        :itemPrIdx(r,i)>=0?`<input type="checkbox" id="cp-${id}-${i}" checked disabled hidden><span class="prtag" title="Item comprado na PR ${esc(prsOf(r)[itemPrIdx(r,i)].pr)}">PR ${esc(prsOf(r)[itemPrIdx(r,i)].pr)}</span>`
+        :`<label class="sn ${prsOf(r).length?"pend":""}" title="Marque para incluir este item na nova PR"><input type="checkbox" id="cp-${id}-${i}" ${neg?"disabled":""} aria-label="Incluir item ${i+1} na PR"> <span>${prsOf(r).length?"Pendente":"Incluir"}</span></label>`}</td></tr>`; }).join("")}
     </tbody></table></div>
     <p class="sub" style="margin:8px 0 0">Suprimentos ajusta código, tipo de compra, grupo e comprado. A descrição é do solicitante e só ele altera, pelo botão Editar RMS. Comprado (S/N) é marcação interna e <strong>não encerra</strong> a RMS: ela só fica <strong>Entregue</strong> quando a entrega total for registrada no Diligenciamento.</p>
    </div></section>`;
@@ -2474,7 +2508,7 @@ function tratFooter(r){
 function tratPrev(id){
   const r=S.rms.find(x=>x.id===id), cur=stOf(id), E=CSS.escape(id), v=$("#st-"+E)?.value||"";
   const n=(r?.itens||[]).length; let k=0, ke=0; for(let i=0;i<n;i++){ const el=$(`#cp-${E}-${i}`); if(el?el.checked:(S.status[id]?.comprados||[])[i]) k++; if(r&&almoxEst(r,i)) ke++; }
-  const rc=($("#rc-"+E)?.value||"").trim(); let st;
+  const rc=($("#rc-"+E)?.value||"").trim() || (r&&prsOf(r).length?"pr":""); let st;
   if(["cancelado","recusado","revisao"].includes(v)) st=v;
   else if(v==="atendimento"||v==="analise") st=v;
   else if(v==="reabrir") st=r?(statusEntrega(r)||(rc?"atendimento":"analise")):"analise";
@@ -2512,10 +2546,22 @@ async function tratSalvar(id, t){
   const E=CSS.escape(id), r=S.rms.find(x=>x.id===id); if(!r) return;
   { const tv=travaDe(id); if(tv){ toast(`RMS em tratamento por ${quemTxt(id)}. Aguarde a liberação.`); return; } }
   const cur=S.status[id]||{}, parts=[], extra={}, n=(r.itens||[]).length;
-  const rc=$("#rc-"+E).value.trim(), pj=projOf(r) /* projeto vem do solicitante: não editável (nota 066) */, ap=(S.status[id]||{}).dataAprovPr||""; let dt=$("#dt-"+E).value; if(rc && !dt){ dt=today(); $("#dt-"+E).value=dt; }
+  const rc=($("#rc-"+E)?.value||"").trim(), pj=projOf(r) /* projeto vem do solicitante: não editável (nota 066) */; let dt=$("#dt-"+E)?.value||""; if(rc && !dt){ dt=today(); if($("#dt-"+E)) $("#dt-"+E).value=dt; }
   const {st,k,v}=tratPrev(id), ms=$("#ms-"+E), msg=(ms?.value||"").trim();
-  if(ap && dt && ap<dt){ $("#dt-"+E).classList.add("err"); toast("A data da PR não pode ser depois da aprovação da RC."); return; }
-  if(ap && !dt){ $("#dt-"+E).classList.add("err"); toast("Informe a data da PR."); return; }
+  // PRs existentes (editar nº/data ou apagar o nº para retirar a PR) + nova PR para itens pendentes — nota 067
+  const prsAnt=prsOf(r), prsNov=[], prParts=[];
+  for(let q=0;q<prsAnt.length;q++){ const p=prsAnt[q], nn=($(`#prn-${E}-${q}`)?.value??p.pr).trim(), dd=$(`#prd-${E}-${q}`)?.value??p.data;
+    if(!nn){ prParts.push(`PR ${p.pr} retirada · itens ${(p.itens||[]).map(i=>i+1).join(", ")} voltam a pendentes`); continue; }
+    if(p.aprov && dd && dd>p.aprov){ $(`#prd-${E}-${q}`)?.classList.add("err"); toast(`A data da PR ${nn} não pode ser depois da aprovação da RC.`); return; }
+    if(!dd){ $(`#prd-${E}-${q}`)?.classList.add("err"); toast(`Informe a data da PR ${nn}.`); return; }
+    if(nn!==p.pr) prParts.push(`PR ${p.pr} corrigida para ${nn}`); if(dd!==(p.data||"")) prParts.push(`Data da PR ${nn}: ${fmtD(dd)}`);
+    prsNov.push({...p, pr:nn, data:dd}); }
+  const livres=(r.itens||[]).map((_,i)=>i).filter(i=>!almoxEst(r,i) && !prsNov.some(p=>(p.itens||[]).includes(i)));
+  const marcados=livres.filter(i=>$(`#cp-${E}-${i}`)?.checked);
+  if(rc){ if(prsNov.some(p=>p.pr===rc)){ $("#rc-"+E).classList.add("err"); toast(`A PR ${rc} já está nesta RMS. Para mais itens na mesma PR, use outro número ou corrija a PR existente.`); return; }
+    const its=marcados.length?marcados:livres; if(!its.length){ $("#rc-"+E).classList.add("err"); toast("Não há itens pendentes para esta nova PR."); return; }
+    prsNov.push({pr:rc, data:dt, rc:"", aprov:"", itens:its}); prParts.push(`PR ${rc} criada para ${its.length===1?"o item":"os itens"} ${its.map(i=>i+1).join(", ")} · segue para o Diligenciamento como bloqueada até a aprovação do gerente`); }
+  else if(marcados.length){ $("#rc-"+E)?.classList.add("err"); $("#rc-"+E)?.focus(); toast(`Informe o nº da PR para ${marcados.length===1?"o item marcado":"os itens marcados"} (${marcados.map(i=>i+1).join(", ")}).`); return; }
   if((st==="cancelado"||st==="recusado") && v===st && msg.length<5){ ms.classList.add("err"); ms.focus(); toast(`Informe o motivo para marcar a RMS como ${STATUS[st].label}.`); return; }
   if(st==="revisao" && v==="revisao" && msg.length<10){ ms.classList.add("err"); ms.focus(); toast("Escreva a mensagem para o solicitante explicando o que precisa ser revisado."); return; }
   // itens
@@ -2525,14 +2571,14 @@ async function tratSalvar(id, t){
     const tc=$(`#tc-${E}-${i}`)?.value||"", gv=$(`#gp-${E}-${i}`)?.value||"", [g,c]=gv.split("|");
     const x={tipoCompra:tc, grupo:(g||"").trim().toUpperCase(), comprador:(c||"").trim()}, o=trItem(cur,i);
     if(x.tipoCompra!==(o.tipoCompra??cur.tipoCompra??"")||x.grupo!==(o.grupo??cur.grupo??"")||x.comprador!==(o.grupo!=null?o.comprador:cur.comprador??"")) trCh++;
-    trat.push(x); comp.push(!!$(`#cp-${E}-${i}`)?.checked); return {...it, codigo:cd}; });
-  extra.itensTrat=trat; extra.comprados=comp;
+    trat.push(x); return {...it, codigo:cd}; });
+  (r.itens||[]).forEach((_,i)=>comp.push(almoxEst(r,i) || prsNov.some(p=>(p.itens||[]).includes(i)) || (pedidosOf(r).length>0 && !!(cur.comprados||[])[i])));
+  extra.itensTrat=trat; extra.comprados=comp; Object.assign(extra, prsSync(prsNov));
   extra.tipoCompra=predom(trat.map(x=>x.tipoCompra)); const gp=predom(trat.map(x=>x.grupo?`${x.grupo}|${x.comprador}`:"")).split("|"); extra.grupo=gp[0]||""; extra.comprador=gp[1]||"";
   if(codCh.length) parts.push(`Código do material atualizado em ${codCh.length} item(ns)`);
   if(trCh) parts.push(`Tipo de compra / grupo atualizados em ${trCh} item(ns)`);
-  const kAnt=(r.itens||[]).filter((_,i)=>(cur.comprados||[])[i]).length; if(k!==kAnt) parts.push(`Itens comprados: ${k}/${n}`);
-  if(rc!==(cur.rcPr||"")) parts.push(rc?`PR ${rc} criada · segue para o Diligenciamento como bloqueada até a aprovação do gerente`:"PR removida");
-  if(dt!==(cur.dataRcPr||"")) parts.push("Data da PR "+fmtD(dt));
+  parts.push(...prParts);
+  const kNovo=comp.filter(Boolean).length, kAnt=buyOf(r).k; if(kNovo!==kAnt) parts.push(`Itens comprados: ${kNovo}/${n}`);
   
   if(pj && pj!==projOf(r)){ extra.projeto=pj; parts.push("Projeto: "+pj); }
   const was=stOf(id), neg=st==="cancelado"||st==="recusado";
@@ -2548,8 +2594,9 @@ async function tratSalvar(id, t){
   try{
     if(codCh.length){ const entry={em:new Date().toISOString(), por:"Suprimentos", uid:S.uid||null, alteracoes:codCh}, patch={itens:novosItens, log:[...(r.log||[]), entry]};
       if(S.mode==="db") await S.db.doc("rms/"+id).update(patch); else { Object.assign(r,patch); localSave(); } Object.assign(r,patch); }
-    await saveStatus(id,{status:st,rcPr:rc,dataRcPr:dt,...extra},parts.join(" · "));
-    toast(`RMS ${fmtNum(id)} atualizada · ${STATUS[st].label}.`); fechar(); }
+    const stF = prsNov.length ? (["analise","atendimento"].includes(st)?"atendimento":st) : (st==="atendimento"&&!rc?"analise":st);
+    await saveStatus(id,{status:stF,...extra},parts.join(" · "));
+    toast(`RMS ${fmtNum(id)} atualizada · ${STATUS[stF].label}${pendentesOf(r).length&&prsNov.length?` · ${pendentesOf(r).length} item(ns) ainda sem PR`:""}.`); fechar(); }
   catch(e){ t.disabled=false; t.textContent="Salvar"; toast(e?.code==="permission_denied"?(S.supa?"Não foi possível salvar: outro comprador está tratando esta RMS ou você não tem permissão.":"Somente Editores do portal (Suprimentos) podem alterar a RMS."):`Falha ao salvar: ${motivoErro(e)}`); }
 }
 /* ---------- Notificações ao solicitante (pop-up no Painel de acompanhamento) ---------- */
@@ -2706,13 +2753,14 @@ document.addEventListener("click",async ev=>{
   else if(a==="dilsave"){
     const id=t.dataset.id, g=k=>$("#"+k+"-"+CSS.escape(id)), r=S.rms.find(x=>x.id===id), its=r.itens||[], old=dItens(r);
     const bad=(el,msg)=>{ el?.classList.add("err"); el?.focus(); toast(msg); };
-    const v={rcPr:g("pr").value.trim(), dataRcPr:g("dpr").value, rcNum:g("rcn").value.trim(), dataAprovPr:g("dap").value, obs:g("ob").value.trim()};
-    if((v.rcNum||v.dataAprovPr) && !v.rcPr) return bad(g("pr"),"A RC só pode ser informada depois que Suprimentos criar a PR.");
-    if(v.rcNum && !v.dataAprovPr) return bad(g("dap"),"Informe a data de aprovação da RC.");
-    if(v.dataAprovPr && !v.rcNum) return bad(g("rcn"),"Informe o nº da RC liberada pelo gerente.");
-    if(v.dataAprovPr && !v.dataRcPr) return bad(g("dpr"),"Informe a data da PR antes da aprovação da RC.");
-    if(v.dataAprovPr && v.dataAprovPr<v.dataRcPr) return bad(g("dap"),"A aprovação da RC não pode ser anterior à data da PR.");
-    if(v.dataAprovPr && v.dataAprovPr>today()) return bad(g("dap"),"A data de aprovação da RC não pode ser futura.");
+    const v={obs:g("ob").value.trim()}, prsA=prsOf(r), prsN=[], rcEv=[];
+    for(let q=0;q<prsA.length;q++){ const p=prsA[q], gq=k=>$("#"+k+"-"+CSS.escape(id)+"-"+q), rcn=(gq("rcn")?.value||"").trim(), ap=gq("dap")?.value||"";
+      if(rcn && !ap) return bad(gq("dap"),`PR ${p.pr}: informe a data de aprovação da RC.`);
+      if(ap && !rcn) return bad(gq("rcn"),`PR ${p.pr}: informe o nº da RC liberada pelo gerente.`);
+      if(ap && p.data && ap<p.data) return bad(gq("dap"),`PR ${p.pr}: a aprovação da RC não pode ser anterior à data da PR.`);
+      if(ap && ap>today()) return bad(gq("dap"),`PR ${p.pr}: a data de aprovação da RC não pode ser futura.`);
+      if(rcn!==(p.rc||"") || ap!==(p.aprov||"")){ const dg2=ap&&p.data?dDiff(p.data,ap):null; rcEv.push(rcn?`RC ${rcn} liberada pelo gerente para a PR ${p.pr} em ${fmtD(ap)}${dg2!=null?` (${dg2} dia(s) útil(eis) com o gerente)`:""}`:`RC removida da PR ${p.pr}`); }
+      prsN.push({...p, rc:rcn, aprov:ap}); }
     const itens=[];
     for(let i=0;i<its.length;i++){
       const k=id+"-"+i, q=+its[i].qtd||0, gi=p=>$("#"+p+"-"+CSS.escape(k)), n=`Item ${i+1}`;
@@ -2721,16 +2769,13 @@ document.addEventListener("click",async ev=>{
       if(x.qtdEntregue>q) return bad(gi("iqe"),`${n}: a quantidade entregue (${nfmt(x.qtdEntregue)}) é maior que a do item (${nfmt(q)}).`);
       if(x.qtdEntregue>0 && !x.pedido) return bad(gi("ipd"),`${n}: informe o nº do pedido antes de registrar entrega.`);
       if(x.dataPedido && x.dataRemessa && x.dataRemessa<x.dataPedido) return bad(gi("idr"),`${n}: a remessa não pode ser anterior à data do pedido.`);
-      if(v.dataRcPr && x.dataPedido && x.dataPedido<v.dataRcPr) return bad(gi("idp"),`${n}: a data do pedido não pode ser anterior à data da PR.`);
+      const dPrI=(prsA[itemPrIdx(r,i)]||{}).data; if(dPrI && x.dataPedido && x.dataPedido<dPrI) return bad(gi("idp"),`${n}: a data do pedido não pode ser anterior à data da PR.`);
       if(x.pedido && x.qtdEntregue>=q && q>0 && !x.dataEntrega) x.dataEntrega=today();
-      if(x.dataEntrega && v.dataRcPr && x.dataEntrega<v.dataRcPr) return bad(gi("ide"),`${n}: a data da entrega não pode ser anterior à data da PR.`);
+      if(x.dataEntrega && dPrI && x.dataEntrega<dPrI) return bad(gi("ide"),`${n}: a data da entrega não pode ser anterior à data da PR.`);
       itens.push(x);
     }
     const cur=S.status[id]||{}, dg=S.dilig[id]||{}, stPatch={}, ev=[];
-    if(v.rcPr!==(cur.rcPr||"")){ stPatch.rcPr=v.rcPr; ev.push("PR "+(v.rcPr||"removida")); }
-    if(v.dataRcPr!==(cur.dataRcPr||"")){ stPatch.dataRcPr=v.dataRcPr; ev.push("Data da PR "+fmtD(v.dataRcPr)); }
-    if(v.rcNum!==(cur.rcNum||"")){ stPatch.rcNum=v.rcNum; ev.push(v.rcNum?`RC ${v.rcNum} liberada pelo gerente`:"RC removida"); }
-    if(v.dataAprovPr!==(cur.dataAprovPr||"")){ stPatch.dataAprovPr=v.dataAprovPr; const dg2=v.dataRcPr&&v.dataAprovPr?dDiff(v.dataRcPr,v.dataAprovPr):null; ev.push(v.dataAprovPr?`Aprovação da RC em ${fmtD(v.dataAprovPr)}${dg2!=null?` (${dg2} dia(s) útil(eis) com o gerente)`:""}`:"Aprovação da RC removida"); }
+    if(rcEv.length){ Object.assign(stPatch, prsSync(prsN)); ev.push(...rcEv); }
     const peds=uniq(itens.map(x=>x.pedido)), pedStr=peds.join(", ");
     if(pedStr!==(cur.pedido||"")){ stPatch.pedido=pedStr; stPatch.pedidos=peds; const novos=peds.filter(p=>!uniq(String(cur.pedido||"").split(/\s*,\s*/)).includes(p));
       ev.push(novos.length?`Pedido(s) de compra ${novos.join(", ")} registrado(s)`:"Pedidos atualizados: "+(pedStr||"nenhum")); }
@@ -2749,7 +2794,7 @@ document.addEventListener("click",async ev=>{
         const lista=o.itens.map(i=>`Item ${i+1} – ${its[i].descricao}: ${nfmt(Math.min(+its[i].qtd||0,itens[i].qtdEntregue))} de ${nfmt(its[i].qtd)} ${its[i].un||""}`).join("\n");
         novasN.push({id:`${id}-${pd}-${Date.now()}`, em:new Date().toISOString(), tipo:k, titulo:k==="entregue"?`Pedido ${pd} entregue`:`Pedido ${pd} entregue parcialmente`, texto:(k==="parcial"?`Entregue ${nfmt(o.ent)} de ${nfmt(o.qtd)} · pendente ${nfmt(o.qtd-o.ent)}\n`:`Entrega total: ${nfmt(o.qtd)} unidade(s)\n`)+lista}); } });
     if(novasN.length){ stPatch.notificacoes=[...(cur.notificacoes||[]), ...novasN]; ev.push("Solicitante notificado: "+novasN.map(n=>n.titulo).join("; ")); }
-    const dPatch={prBloqueada:!!v.rcPr&&!v.dataAprovPr, obs:v.obs, itens, dataPedido:null, fornecedor:null, dataRemessa:null, nf:null, qtdTotal:null, qtdEntregue:null, dataEntrega:null, entregue:null};
+    const dPatch={prBloqueada:prsN.some(p=>!p.aprov), obs:v.obs, itens, dataPedido:null, fornecedor:null, dataRemessa:null, nf:null, qtdTotal:null, qtdEntregue:null, dataEntrega:null, entregue:null};
     const dChanged = v.obs!==(dg.obs||"") || JSON.stringify(itens)!==JSON.stringify(old.map(o=>({pedido:o.pedido||"",dataPedido:o.dataPedido||"",fornecedor:o.fornecedor||"",dataRemessa:o.dataRemessa||"",nf:o.nf||"",qtdEntregue:itemEnt(o),dataEntrega:o.dataEntrega||"",obs:o.obs||""})));
     if(!ev.length && !dChanged){ S.dilEdit=null; S.dilKeep=null; toast(`RMS ${fmtNum(id)}: nada mudou.`); render(); window.scrollTo(0,0); return; }
     t.disabled=true;
