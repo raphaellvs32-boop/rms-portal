@@ -489,6 +489,7 @@ body.locked .snwrap{display:none}
     <a href="#indicadores" data-v="indicadores" id="navInd"><span class="ic">▥</span>Indicadores</a>
     <a href="#todas" data-v="todas" id="navTod"><span class="ic">≣</span>Todas as RMS</a>
     <h3 class="ng" id="ngAdm">Administração</h3>
+    <a href="#gestor" data-v="gestor" id="navGes" hidden><span class="ic">◎</span>Painel do Gestor</a>
     <a href="#config" data-v="config" id="navCfg"><span class="ic">⚙</span>Configurações</a>
   </nav>
   <main id="main" aria-live="polite"></main>
@@ -612,7 +613,7 @@ function setConn(){
   const dot=$("#connDot"), lbl=$("#connLbl");
   if(S.mode==="db"){ dot.className="dot on"; lbl.lastChild.textContent=S.supa?"Base compartilhada (nuvem)":"Base compartilhada"; }
   else if(S.mode==="local"){ dot.className="dot off"; lbl.lastChild.textContent="Modo local (este navegador)"; }
-  $("#navIni").hidden = !(S.canSup||S.canAlmox); $("#navAlm").hidden = !(S.canSup||S.canAlmox); $("#ngAlm").hidden = $("#navAlm").hidden; $("#ngSup").hidden = !(S.canSup||S.canAlmox); $("#ngAdm").hidden = !S.isAdmin; $("#navTod").hidden = !S.canSup; $("#navSup").hidden = !S.canSup; $("#navCfg").hidden = !S.isAdmin; $("#navDil").hidden = !S.canSup; $("#navInd").hidden = !(S.canSup||S.canAlmox);
+  $("#navIni").hidden = !(S.canSup||S.canAlmox); $("#navAlm").hidden = !(S.canSup||S.canAlmox); $("#ngAlm").hidden = $("#navAlm").hidden; $("#ngSup").hidden = !(S.canSup||S.canAlmox); $("#ngAdm").hidden = !S.isAdmin; $("#navTod").hidden = !S.canSup; $("#navSup").hidden = !S.canSup; $("#navCfg").hidden = !S.isAdmin; $("#navGes").hidden = !S.isAdmin; $("#navDil").hidden = !S.canSup; $("#navInd").hidden = !(S.canSup||S.canAlmox);
 }
 
 async function boot(){
@@ -671,7 +672,7 @@ async function saveStatus(id, patch, evento, opts={}){
   const cur=S.status[id]||{status:"analise",historico:[]};
   if(evento && !patch.notificacoes && !opts.semAviso){ const ns=patch.status, tit=ns&&ns!==(cur.status||"analise")?`Status: ${STATUS[ns]?.label||ns}`:"RMS atualizada por Suprimentos";
     patch={...patch, notificacoes:[...(cur.notificacoes||[]), {id:`${id}-ev-${Date.now()}`, em:new Date().toISOString(), tipo:"acao", titulo:tit, texto:evento}]}; }
-  const hist=[...(cur.historico||[]), {em:new Date().toISOString(), evento}];
+  const hist=[...(cur.historico||[]), {em:new Date().toISOString(), evento, ...(S.auth?.user?.nome?{por:S.auth.user.nome}:{})}];
   const next={...cur, ...patch, historico:hist, atualizadoEm:new Date().toISOString()};
   if(S.mode==="db"){ await S.db.doc("status/"+id).set(next); }
   else { S.status[id]=next; localSave(); }
@@ -681,7 +682,8 @@ async function saveStatus(id, patch, evento, opts={}){
 /* ---------- Roteamento ---------- */
 function route(){
   const h=(location.hash||"#painel").slice(1);
-  S.view=["painel","nova","minhas","suprimentos","almox","todas","config","dilig","indicadores","editar"].includes(h)?h:"painel";
+  S.view=["painel","nova","minhas","suprimentos","almox","todas","config","dilig","indicadores","editar","gestor"].includes(h)?h:"painel";
+  if(S.view!=="gestor") S.gestorOk=false; /* senha pedida toda vez que abrir o Painel do Gestor */
   if(S.view==="editar" && !S.editId) S.view="painel";
   if(S.view!=="editar" && S.editId){ S.editId=null; S.draft=null; S.errors=[]; }
   if(S.view==="nova" && !S.draft){ S.draft=newDraft(); const u=S.auth?.user; if(u){ S.draft.solicitante={nome:u.nome||"",matricula:u.matricula||""}; } }
@@ -709,6 +711,7 @@ function render(){
   else if(S.view==="almox") m.innerHTML=(S.canSup||S.canAlmox)?viewAlmox():viewPainel();
   else if(S.view==="todas") m.innerHTML=S.canSup?viewLista(false):viewPainel();
   else if(S.view==="config") m.innerHTML=S.isAdmin?viewConfig():viewPainel();
+  else if(S.view==="gestor") m.innerHTML=S.isAdmin?(S.gestorOk?viewGestor():viewGestorSenha()):viewPainel();
   else if(S.view==="dilig") m.innerHTML=S.canSup?viewDilig():viewPainel();
   else if(S.view==="indicadores") m.innerHTML=(S.canSup||S.canAlmox)?viewIndicadores():viewPainel();
   else m.innerHTML=viewPainel();
@@ -2007,6 +2010,8 @@ function assinarDados(db, onR, onS){
   db.doc("config/locais").onSnapshot(d=>{ S.locais=d.exists?(d.data().lista||null):null; softRender(); }, ()=>{});
   db.doc("config/compradores").onSnapshot(d=>{ S.compradores=(d.exists&&d.data().lista)||[]; softRender(); }, ()=>{});
   if(db.supa) db.collection("travas").onSnapshot(snap=>{ const antes=S.openId?JSON.stringify(travaDe(S.openId)):""; const m={}; snap.docs.forEach(d=>m[d.id]=d.data()); S.travas=m; softRender(); if(S.openId && JSON.stringify(travaDe(S.openId))!==antes) renderDrawer(); }, ()=>{});
+  if(db.supa) db.collection("sessoes").onSnapshot(snap=>{ S.sessoes=snap.docs.map(d=>({...d.data(),_id:d.id})); if(S.view==="gestor") softRender(); }, ()=>{});
+  if(db.supa) db.collection("producao").onSnapshot(snap=>{ S.producao=snap.docs.map(d=>({...d.data(),_id:d.id})); if(S.view==="gestor") softRender(); }, ()=>{});
   if(db.supa) db.collection("travas_quem").onSnapshot(snap=>{ const m={}; snap.docs.forEach(d=>m[d.id]=d.data()); S.travasQuem=m; softRender(); }, ()=>{});
 }
 const supaVoltar = () => location.origin+location.pathname;
@@ -2214,6 +2219,79 @@ function viewPainel(){
    ${loadingOr(`<div class="bento ${anim?"anim":""}">${fila}${t1}${t2}${t3}${t4}<div class="tile w2" style="--i:5">${bar}</div>${minhas}${stream}</div>`)}
    ${S.mode==="local"?`<div class="note warn">Modo local: os registros ficam somente neste navegador. Abra o portal pelo link publicado no claude.ai para usar a base compartilhada da equipe.</div>`:""}`;
 }
+
+/* ---------- Painel do Gestor: produtividade dos compradores (nota 062) · só o Administrador, com senha a cada acesso ---------- */
+const fmtDur = ms => { if(ms==null||isNaN(ms)) return "—"; const m=Math.round(ms/60000); if(m<1) return "<1 min"; const h=Math.floor(m/60), r=m%60; return h?`${h}h${r?` ${String(r).padStart(2,"0")}min`:""}`:`${r} min`; };
+const durSes = x => Math.max(0, new Date(x.fim||x.inicio).getTime()-new Date(x.inicio).getTime());
+const farolSes = ms => ms<=30*60000?"verde":ms<=2*3600000?"amarelo":"vermelho";
+const GES_CORES=["#4F7A00","#0891B2","#334155","#84BD00","#0E7490","#94a3b8"];
+function viewGestorSenha(){
+  return `<div class="head"><div><h2>Painel do Gestor</h2><p>Área restrita ao Administrador. Confirme sua senha para abrir.</p></div></div>
+  <section class="panel" style="max-width:440px"><div class="body"><form id="gesForm" class="lg-form" novalidate>
+    <label class="f">Sua senha do portal<input class="in" id="gesSenha" type="password" autocomplete="current-password" autofocus></label>
+    ${S.gesErr?`<div class="errors" role="alert">${esc(S.gesErr)}</div>`:""}
+    <button class="btn primary" type="submit" ${S.gesBusy?"disabled":""}>${S.gesBusy?"Conferindo…":"Abrir Painel do Gestor"}</button>
+    <p class="sub" style="margin:0">A senha é pedida toda vez que você entra nesta tela.</p></form></div></section>`;
+}
+async function gestorEntrar(senha){
+  const email=S.auth?.user?.email; if(!email||!senha){ S.gesErr="Digite a sua senha."; return render(); }
+  S.gesBusy=true; S.gesErr=""; render(); let ok=false;
+  try{ if(S.supa){ const {error}=await S.sb.auth.signInWithPassword({email,password:senha}); ok=!error; }
+       else { const pr=await lerSenhaPropria(email); if(pr?.sal){ const h=await hashSenha(senha,pr.sal); ok=h.hash===pr.hash; } }
+  }catch{ ok=false; }
+  S.gesBusy=false; if(ok){ S.gestorOk=true; S.gesErr=""; } else S.gesErr="Senha incorreta."; render();
+}
+document.addEventListener("submit",ev=>{ if(ev.target.id!=="gesForm") return; ev.preventDefault(); gestorEntrar($("#gesSenha").value); });
+function gesMeses(n){ const out=[], d=new Date(); d.setDate(1); for(let i=0;i<n;i++){ out.unshift(d.toISOString().slice(0,7)); d.setMonth(d.getMonth()-1); } return out; }
+const mesNome = ym => { const [y,m]=ym.split("-"); return ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"][+m-1]+"/"+y.slice(2); };
+function gesGrafico(prod, meses, comps){
+  if(!comps.length) return `<div class="empty">Nenhuma PR registrada ainda. Os números começam a contar a partir da implantação do painel.</div>`;
+  const W=640, H=230, pl=34, pb=28, pt=12, max=Math.max(1,...meses.flatMap(m=>comps.map(c=>prod.filter(x=>x.uid===c.uid&&String(x.em).slice(0,7)===m).length)));
+  const top=Math.ceil(max/4)*4||4, gw=(W-pl-8)/meses.length, bw=Math.min(22,(gw-10)/comps.length), y=v=>pt+(H-pt-pb)*(1-v/top);
+  let g=""; for(let i=0;i<=4;i++){ const v=top*i/4; g+=`<line x1="${pl}" x2="${W-4}" y1="${y(v)}" y2="${y(v)}" stroke="#e2e8f0"/><text x="${pl-6}" y="${y(v)+4}" text-anchor="end" font-size="10" fill="#64748b">${v}</text>`; }
+  meses.forEach((m,i)=>{ const x0=pl+i*gw+(gw-bw*comps.length)/2;
+    comps.forEach((c,j)=>{ const n=prod.filter(x=>x.uid===c.uid&&String(x.em).slice(0,7)===m).length; if(n) g+=`<rect x="${x0+j*bw}" y="${y(n)}" width="${bw-2}" height="${y(0)-y(n)}" rx="2" fill="${c.cor}"><title>${esc(c.nome)} · ${mesNome(m)}: ${n} RMS</title></rect><text x="${x0+j*bw+(bw-2)/2}" y="${y(n)-3}" text-anchor="middle" font-size="9.5" fill="#334155">${n}</text>`; });
+    g+=`<text x="${pl+i*gw+gw/2}" y="${H-8}" text-anchor="middle" font-size="11" fill="#64748b">${mesNome(m)}</text>`; });
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;display:block" role="img" aria-label="RMS processadas por comprador nos últimos meses">${g}</svg>
+   <div class="leg3" style="margin-top:6px">${comps.map(c=>`<span><i style="background:${c.cor}"></i>${esc(c.nome)}</span>`).join("")}</div>`;
+}
+function viewGestor(){
+  const meses=gesMeses(6), mes=S.gesMes||meses[meses.length-1], prod=S.producao||[], ses=S.sessoes||[];
+  const nomes={}; [...prod,...ses].forEach(x=>{ if(x.uid) nomes[x.uid]=x.nome||x.email||"Comprador"; });
+  const comps=Object.keys(nomes).sort((a,b)=>nomes[a].localeCompare(nomes[b])).map((uid,i)=>({uid,nome:nomes[uid],cor:GES_CORES[i%GES_CORES.length]}));
+  const pm=prod.filter(x=>String(x.em).slice(0,7)===mes), sm=ses.filter(x=>String(x.inicio).slice(0,7)===mes);
+  const telaRms=(uid,rid)=>ses.filter(x=>x.uid===uid&&x.rms===rid).reduce((a,x)=>a+durSes(x),0);
+  const cheg=x=>{ const r=S.rms.find(z=>z.id===x.rms); const c=r?String(chegada(r)).slice(0,10):""; return c?diasUteis(c,String(x.em).slice(0,10)):null; };
+  const linhas=comps.map(c=>{ const P=pm.filter(x=>x.uid===c.uid), Sx=sm.filter(x=>x.uid===c.uid), tela=P.map(x=>telaRms(c.uid,x.rms)), ch=P.map(cheg).filter(v=>v!=null);
+    return {...c, n:P.length, tela:tela.length?tela.reduce((a,b)=>a+b,0)/tela.length:null, cheg:avgN(ch), sess:Sx.length, total:Sx.reduce((a,x)=>a+durSes(x),0), maior:Sx.length?Math.max(...Sx.map(durSes)):null}; }).filter(l=>l.n||l.sess);
+  const telaAll=pm.map(x=>telaRms(x.uid,x.rms)), chAll=pm.map(cheg).filter(v=>v!=null);
+  const abertas=Object.entries(S.travas||{}).filter(([,t])=>new Date(t.expira).getTime()>agoraSrv()).map(([rid,t])=>({rid,t,nome:(S.travasQuem||{})[rid]?.nome||"—",ms:agoraSrv()-new Date(t.desde).getTime()})).sort((a,b)=>b.ms-a.ms);
+  const longas=[...sm].sort((a,b)=>durSes(b)-durSes(a)), pgL=paginar("ges-ses",longas,mes);
+  const kp=(l,v,sub)=>`<div class="tile"><span class="lbl">${l}</span><span class="big">${v}</span><small>${sub}</small></div>`;
+  return `<div class="head"><div><h2>Painel do Gestor</h2><p>Produtividade dos compradores · somente você vê esta tela.</p></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Mês <select class="in" id="gesMes" style="width:auto">${[...meses].reverse().map(m=>`<option value="${m}" ${m===mes?"selected":""}>${mesNome(m)}</option>`).join("")}</select></label>
+    <button class="btn" data-act="gessair">Bloquear painel</button></div></div>
+  <div class="bento" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+    ${kp("RMS processadas no mês",pm.length,"PRs criadas pelos compradores")}
+    ${kp("Tempo de tela por RMS",fmtDur(telaAll.length?telaAll.reduce((a,b)=>a+b,0)/telaAll.length:null),"média, RMS aberta até criar a PR")}
+    ${kp("Chegada → PR",fdN(avgN(chAll)),"média em dias úteis")}
+    ${kp("RMS abertas agora",abertas.length,abertas.length?`a mais longa há ${fmtDur(abertas[0].ms)}`:"nenhuma em tratamento")}
+  </div>
+  <section class="panel"><header><h3>RMS processadas por comprador</h3><span class="sub" style="margin:0">últimos 6 meses · PR criada = RMS processada</span></header><div class="body">${gesGrafico(prod,meses,comps)}</div></section>
+  <section class="panel"><header><h3>Produtividade em ${mesNome(mes)}</h3><span class="sub" style="margin:0">tempo de tela = período com a RMS aberta no portal</span></header>
+   ${linhas.length?`<div class="tw"><table><thead><tr><th>Comprador</th><th class="r">RMS processadas</th><th class="r">Tempo de tela por RMS</th><th class="r">Chegada → PR</th><th class="r">Sessões</th><th class="r">Tempo total de tela</th><th class="r">Maior sessão</th></tr></thead><tbody>
+    ${linhas.map(l=>`<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${l.cor};margin-right:8px"></span><strong>${esc(l.nome)}</strong></td><td class="num r"><strong>${l.n}</strong></td><td class="num r">${fmtDur(l.tela)}</td><td class="num r">${fdN(l.cheg)}</td><td class="num r">${l.sess}</td><td class="num r">${fmtDur(l.total)}</td><td class="r">${l.maior!=null?`<span class="farol f-${farolSes(l.maior)}"><i></i>${fmtDur(l.maior)}</span>`:"—"}</td></tr>`).join("")}
+   </tbody></table></div>`:`<div class="empty">Sem movimento de compradores em ${mesNome(mes)}.</div>`}</section>
+  <div class="dash">
+  <section class="panel"><header><h3>RMS abertas agora</h3><span class="sub" style="margin:0">${abertas.length} em tratamento</span></header>
+   ${abertas.length?`<div class="tw"><table><thead><tr><th>Comprador</th><th>RMS</th><th>Aberta desde</th><th class="r">Há</th></tr></thead><tbody>${abertas.map(a=>`<tr class="click" data-act="open" data-id="${esc(a.rid)}"><td>${esc(a.nome)}</td><td class="num">${esc(fmtNum(a.rid))}</td><td class="num">${fmtDT(a.t.desde)}</td><td class="r"><span class="farol f-${farolSes(a.ms)}"><i></i>${fmtDur(a.ms)}</span></td></tr>`).join("")}</tbody></table></div>`:`<div class="empty">Nenhuma RMS aberta neste momento.</div>`}</section>
+  <section class="panel"><header><h3>Sessões mais longas em ${mesNome(mes)}</h3><span class="sub" style="margin:0">${longas.length} sessão(ões)</span></header>
+   ${longas.length?`<div class="tw"><table><thead><tr><th>Comprador</th><th>RMS</th><th>Início</th><th>Como terminou</th><th class="r">Duração</th></tr></thead><tbody>${pgL.items.map(x=>{ const d=durSes(x); return `<tr class="click" data-act="open" data-id="${esc(x.rms)}"><td>${esc(x.nome||"—")}</td><td class="num">${esc(fmtNum(x.rms))}</td><td class="num">${fmtDT(x.inicio)}</td><td>${x.fechada?(x.fechadaPor==="administrador"?"Liberada pelo admin":"Salvou ou fechou"):(abertas.some(a=>a.rid===x.rms)?"Ainda aberta":"Navegador fechado")}</td><td class="r"><span class="farol f-${farolSes(d)}"><i></i>${fmtDur(d)}</span></td></tr>`; }).join("")}</tbody></table></div>${pgL.html}`:`<div class="empty">Nenhuma sessão registrada em ${mesNome(mes)}.</div>`}</section>
+  </div>
+  <p class="sub">Farol das sessões: verde até 30 min · amarelo até 2 h · vermelho acima de 2 h. Os registros são gravados pelo próprio banco (abrir, renovar a cada minuto, fechar) e não podem ser alterados pelos compradores. Contagem a partir da implantação do painel.</p>
+  ${S.supa?"":`<div class="note warn">Modo local: o Painel do Gestor só tem dados na base compartilhada (nuvem).</div>`}`;
+}
+document.addEventListener("change",ev=>{ if(ev.target.id==="gesMes"){ S.gesMes=ev.target.value; render(); } });
 
 /* ---------- Almoxarifado: conferência de estoque por item (opção B) ---------- */
 const ALMOX_TIPOS=["Material"];
@@ -2714,6 +2792,7 @@ document.addEventListener("click",async ev=>{
   else if(a==="colall"){ delete S.supCol[S.colOpen]; render(); }
   else if(a==="colnone"){ S.supCol[S.colOpen]={set:[]}; render(); }
   else if(a==="colclose"){ S.colOpen=null; S.colQ=""; render(); }
+  else if(a==="gessair"){ S.gestorOk=false; location.hash="#painel"; }
   else if(a==="iniopen"){ const id=t.dataset.id, h=t.dataset.h; if(location.hash!==h) location.hash=h; setTimeout(()=>{ S.openId=id; renderDrawer(); },60); }
   else if(a==="ini"){ const k=t.dataset.k, f=t.dataset.f; if(k==="sup") S.supFilter=f; else if(k==="dil") S.dilFilter=f; else if(k==="alm") S.almTab=f; else if(k==="min"){ S.minF=f; S.q=""; }
     if(location.hash===t.dataset.h) render(); else location.hash=t.dataset.h; }
@@ -2855,7 +2934,7 @@ function entrar(u, silencioso, senhaDefinida){
   S.canAlmox = !!S.claudeSup && (u.perfil||"solicitante")==="almoxarifado";
   S.isAdmin = S.canSup && (!S.supa || u.admin===true);
   setConn(); renderLogin();
-  if((!S.isAdmin && S.view==="config") || (!S.canSup && ["suprimentos","dilig"].includes(S.view)) || (!S.canSup && !S.canAlmox && S.view==="indicadores") || (!S.canSup && !S.canAlmox && S.view==="almox")) location.hash = S.canAlmox ? "#almox" : "#painel"; else render();
+  if((!S.isAdmin && ["config","gestor"].includes(S.view)) || (!S.canSup && ["suprimentos","dilig"].includes(S.view)) || (!S.canSup && !S.canAlmox && S.view==="indicadores") || (!S.canSup && !S.canAlmox && S.view==="almox")) location.hash = S.canAlmox ? "#almox" : "#painel"; else render();
   if(!silencioso) toast(`Bem-vindo(a), ${u.nome||u.email}!`);
   if(S.canSup && (S.mode==="local"||S.diligOk)) setTimeout(reconciliar,800);
 }
