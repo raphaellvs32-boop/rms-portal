@@ -523,6 +523,7 @@ body.locked .snwrap{display:none}
   .tag{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.elemhint{display:block;min-height:16px;margin-top:4px;font-size:12px;color:var(--muted);font-weight:400}.elemhint .ok{color:#4F7A00;font-weight:600}.elemhint .no{color:var(--bad);font-weight:600}
 </style>
 
 <div class="top">
@@ -595,7 +596,7 @@ const prChip = r => `<span class="prio ${prOf(r).cls}">${prOf(r).label}</span>`;
 const UNIDADES = ["UN","PC","CJ","KG","M","M2","M3","L","CX","PAR","RL","GL","SV","H","MÊS","VB"];
 const S = {
   mode:"loading", db:null, uid:null, canSup:false,
-  rms:[], status:{}, compradores:[], cfgVer:0, dilig:{}, dilFilter:"todas", dilEdit:null, indPer:"todos", dilQ:"",
+  rms:[], status:{}, compradores:[], elementos:[], cfgVer:0, dilig:{}, dilFilter:"todas", dilEdit:null, indPer:"todos", dilQ:"",
   view:"painel", filter:"todas", q:"", supFilter:"analise",
   draft:null, errors:[], saving:false, openId:null, assets:null, uploading:0
 };
@@ -636,6 +637,11 @@ const pillOf = r => { const st=STATUS[stOf(r.id)], b=buyOf(r), ne=(r.itens||[]).
 const necOf = r => r.dataNec || (r.itens||[]).map(i=>i.dataNec).filter(Boolean).sort()[0] || "";
 const TIPO_COMPRA = ["Spot","Catálogo","Contrato"];
 const PROJETOS = ["Capex","Opex","Logística"];
+/* Elementos de débito cadastrados em Configurações: cada um já define o projeto */
+const elemNorm = v => String(v??"").trim().toUpperCase().replace(/\s+/g,"");
+const elemAtivos = () => (S.elementos||[]).filter(e=>e.ativo!==false);
+const elemControle = () => elemAtivos().length>0;   // sem cadastro, o campo continua livre
+const elemDe = v => { const k=elemNorm(v); return k ? elemAtivos().find(e=>elemNorm(e.codigo)===k)||null : null; };
 const projOf = r => (S.status[r.id]||{}).projeto || r.projeto || "Não informado";
 const quarterOf = d => { if(!d) return "0000-0"; const x=new Date(String(d).slice(0,10)+"T00:00:00"); return x.getFullYear()+"-"+(Math.floor(x.getMonth()/3)+1); };
 const qLabel = q => { const [y,t]=q.split("-"); return y==="0000"?"s/ data":`${t}T${y.slice(2)}`; };
@@ -679,13 +685,13 @@ function toast(msg){ const r=$("#toastRoot"); r.innerHTML=`<div class="toast" ro
 
 /* ---------- Armazenamento ---------- */
 function localLoad(){ try{ const j=JSON.parse(localStorage.getItem(LS_KEY)||"{}"); return {rms:j.rms||[], status:j.status||{}, compradores:j.compradores||[], dilig:j.dilig||{}}; }catch{ return {rms:[],status:{},compradores:[],dilig:{}}; } }
-function localSave(){ try{ localStorage.setItem(LS_KEY, JSON.stringify({rms:S.rms,status:S.status,compradores:S.compradores,dilig:S.dilig,sla:S.sla||null,locais:S.locais||null})); }catch{} }
+function localSave(){ try{ localStorage.setItem(LS_KEY, JSON.stringify({rms:S.rms,status:S.status,compradores:S.compradores,dilig:S.dilig,sla:S.sla||null,locais:S.locais||null,elementos:S.elementos||[]})); }catch{} }
 
 function startLocal(){
   if(S.mode==="db") return;
   S.mode="local"; S.canSup=true; S.claudeSup=true; S.uid="local";
   try{ S.vistos=new Set(JSON.parse(localStorage.getItem(LS_KEY+"-vistos")||"[]")); S.supDesde=localStorage.getItem(LS_KEY+"-supdesde")||null; }catch{ S.vistos=new Set(); } S.vistosOk=true;
-  const l=localLoad(); S.rms=l.rms; S.status=l.status; S.compradores=l.compradores; S.dilig=l.dilig; try{ const j=JSON.parse(localStorage.getItem(LS_KEY)||"{}"); S.sla=j.sla||null; S.locais=j.locais||null; }catch{}
+  const l=localLoad(); S.rms=l.rms; S.status=l.status; S.compradores=l.compradores; S.dilig=l.dilig; try{ const j=JSON.parse(localStorage.getItem(LS_KEY)||"{}"); S.sla=j.sla||null; S.locais=j.locais||null; S.elementos=j.elementos||[]; }catch{}
   setConn(); render(); iniciarLogin();
 }
 function setConn(){
@@ -718,6 +724,7 @@ async function boot(){
   db.doc("config/sla").onSnapshot(d=>{ S.sla=d.exists?d.data():null; softRender(); }, ()=>{});
   db.doc("config/locais").onSnapshot(d=>{ S.locais=d.exists?(d.data().lista||null):null; softRender(); }, ()=>{});
   db.doc("config/compradores").onSnapshot(d=>{ S.compradores=(d.exists&&d.data().lista)||[]; softRender(); }, ()=>{});
+  db.doc("config/elementos").onSnapshot(d=>{ S.elementos=(d.exists&&d.data().lista)||[]; softRender(); }, ()=>{});
 }
 
 /* Numeração automática: AAAA-NNNN, sequência anual. Reserva por lease para evitar número duplicado entre usuários. */
@@ -1636,6 +1643,7 @@ function viewConfig(){
     <div style="display:flex;align-items:flex-end"><button type="submit" class="btn primary" style="width:100%">Adicionar</button></div>
     ${cfgErr?`<div class="errors" role="alert" style="grid-column:1/-1">${esc(cfgErr)}</div>`:""}
    </form></div></section>
+  ${elementosPanel()}
   <section class="panel"><header><h3>Metas de atendimento (SLA)</h3><span class="hsub">dias úteis da emissão da RMS até o primeiro pedido de compra</span></header>
    <div class="body"><div class="grid g4">${Object.entries(PRIOR).sort((a,b)=>a[1].ord-b[1].ord).map(([k,pr])=>`<label class="f"><span><span class="prio ${pr.cls}">${pr.label}</span></span><input class="in num" type="number" min="1" max="120" id="sla-${k}" value="${slaMeta(k)}"></label>`).join("")}
     <div style="display:flex;align-items:flex-end"><button class="btn primary" style="width:100%" data-act="slasave">Salvar metas</button></div></div>
@@ -1655,6 +1663,48 @@ function viewConfig(){
    </tbody></table></div>`}</section>
   <div class="note">Ao enviar uma RMS, o solicitante vê os compradores ativos para o tipo da solicitação (Material, Serviço ou Peritagem), com botões para copiar os e-mails e a mensagem pronta. O portal não dispara e-mail sozinho.</div>`;
 }
+function elementosPanel(){
+  const L=S.elementos||[], er=S.elemErr||"";
+  return `<section class="panel"><header><h3>Elementos de débito (${L.length})</h3><span class="hsub">cada elemento já marca o projeto na RMS; o solicitante só consegue usar elementos ativos desta lista</span></header>
+   <div class="body"><form id="elemFrm" class="grid g5" novalidate>
+    <label class="f"><span>Elemento <span class="req">*</span></span><input class="in num" id="elemCod" placeholder="Ex.: 142" autocomplete="off"></label>
+    <label class="f"><span>Projeto <span class="req">*</span></span><select class="in" id="elemProj"><option value="">Selecione</option>${PROJETOS.map(p=>`<option>${p}</option>`).join("")}</select></label>
+    <label class="f" style="grid-column:span 2">Descrição (opcional)<input class="in" id="elemDesc" placeholder="Ex.: Investimento linha 2" autocomplete="off"></label>
+    <div style="display:flex;align-items:flex-end"><button type="submit" class="btn primary" style="width:100%">Cadastrar elemento</button></div>
+    ${er?`<div class="errors" role="alert" style="grid-column:1/-1">${esc(er)}</div>`:""}
+   </form>
+   ${!L.length?`<div class="empty" style="margin-top:12px">Nenhum elemento cadastrado. Enquanto a lista estiver vazia, o solicitante digita o elemento livremente e marca o projeto à mão.</div>`:
+   `<div class="tw" style="margin-top:12px"><table><thead><tr><th>Elemento</th><th>Projeto</th><th>Descrição</th><th>Ativo</th><th></th></tr></thead><tbody>
+   ${L.map((e,i)=>`<tr><td class="num"><strong>${esc(e.codigo)}</strong></td>
+     <td><select class="in" style="width:130px" data-elem="projeto" data-i="${i}" aria-label="Projeto">${PROJETOS.map(p=>`<option ${e.projeto===p?"selected":""}>${p}</option>`).join("")}</select></td>
+     <td><input class="in" data-elem="descricao" data-i="${i}" value="${esc(e.descricao||"")}" aria-label="Descrição"></td>
+     <td><label class="buy ${e.ativo!==false?"on":""}"><input type="checkbox" data-elem="ativo" data-i="${i}" ${e.ativo!==false?"checked":""} aria-label="Ativo"> ${e.ativo!==false?"Sim":"Não"}</label></td>
+     <td><button class="btn small" data-act="elemdel" data-i="${i}">Remover</button></td></tr>`).join("")}
+   </tbody></table></div>`}</div></section>`;
+}
+async function saveElementos(lista, msg){
+  const prev=S.elementos; S.elementos=lista; S.elemErr=""; render();
+  try{
+    if(S.mode==="db") await S.db.doc("config/elementos").set({lista, atualizadoEm:new Date().toISOString()});
+    else localSave();
+    toast(msg);
+  }catch(e){ S.elementos=prev; render(); toast(e?.code==="permission_denied"?"Somente o Administrador pode alterar os elementos de débito.":`Falha ao salvar: ${motivoErro(e)}`); }
+}
+document.addEventListener("submit",ev=>{
+  if(ev.target.id!=="elemFrm") return; ev.preventDefault();
+  const codigo=$("#elemCod").value.trim().toUpperCase().replace(/\s+/g,""), projeto=$("#elemProj").value, descricao=$("#elemDesc").value.trim();
+  const volta=()=>{ $("#elemCod").value=codigo; $("#elemProj").value=projeto; $("#elemDesc").value=descricao; };
+  if(!codigo||!projeto){ S.elemErr=!codigo?"Informe o número do elemento.":"Escolha o projeto do elemento."; render(); volta(); return; }
+  if((S.elementos||[]).some(e=>elemNorm(e.codigo)===codigo)){ S.elemErr=`O elemento ${codigo} já está cadastrado.`; render(); volta(); return; }
+  saveElementos([...(S.elementos||[]),{codigo,projeto,descricao,ativo:true,criadoEm:new Date().toISOString()}], `Elemento ${codigo} cadastrado (${projeto}).`);
+});
+document.addEventListener("change",ev=>{
+  const k=ev.target.dataset?.elem; if(!k) return;
+  const i=+ev.target.dataset.i; const lista=(S.elementos||[]).map(e=>({...e}));
+  if(k==="ativo") lista[i].ativo=ev.target.checked; else if(k==="projeto") lista[i].projeto=ev.target.value; else lista[i].descricao=ev.target.value.trim();
+  saveElementos(lista, `Elemento ${lista[i].codigo} atualizado.`);
+});
+
 async function saveCompradores(lista, msg){
   const prev=S.compradores; S.compradores=lista; S.cfgErr=""; render();
   try{
@@ -1724,9 +1774,12 @@ function viewNova(){
     <div style="grid-column:span 2;min-width:0"><p class="sec-t">Prioridade <span style="color:var(--bad)">*</span></p>
       <div class="types pr">${Object.entries(PRIOR).map(([k,p])=>`<label title="${esc(p.dica)}"><input type="radio" name="prioridade" value="${k}" ${d.prioridade===k?"checked":""}> ${p.label}</label>`).join("")}</div>
       <p style="margin:6px 0 0;font-size:12px;color:var(--muted)">${esc(PRIOR[d.prioridade]?.dica||"")}</p></div>
-    <label class="f" style="align-self:end"><span>Elemento de débito <span class="req">*</span></span><input class="in num ${err("elemento")}" id="elemento" value="${esc(d.elemento)}" placeholder="Elemento PEP, CC ou Ordem"></label>
-    <label class="f" style="align-self:end"><span>Data de necessidade <span class="req">*</span></span><input class="in ${err("dataNec")}" type="date" min="${today()}" id="dataNec" value="${esc(d.dataNec)}"></label>
-    <div style="grid-column:span 2;min-width:0"><p class="sec-t">Projeto <span style="color:var(--bad)">*</span></p><div class="types ${err("projeto")}">${PROJETOS.map(p=>`<label><input type="radio" name="projeto" value="${p}" ${d.projeto===p?"checked":""}> ${p}</label>`).join("")}</div></div>
+    <label class="f" style="align-self:end"><span>Elemento de débito <span class="req">*</span></span><input class="in num ${err("elemento")}" id="elemento" value="${esc(d.elemento)}" placeholder="${elemControle()?"Digite ou escolha o elemento":"Elemento PEP, CC ou Ordem"}" ${elemControle()?'list="elemLista" autocomplete="off"':""}>
+      ${elemControle()?`<datalist id="elemLista">${elemAtivos().map(e=>`<option value="${esc(e.codigo)}">${esc(e.codigo)} · ${esc(e.projeto)}${e.descricao?" · "+esc(e.descricao):""}</option>`).join("")}</datalist>`:""}
+      <small id="elemHint" class="elemhint">${elemHint(d.elemento)}</small></label>
+    <label class="f" style="align-self:end"><span>Data de necessidade <span class="req">*</span></span><input class="in ${err("dataNec")}" type="date" min="${today()}" id="dataNec" value="${esc(d.dataNec)}">${elemControle()?`<small class="elemhint" aria-hidden="true"></small>`:""}</label>
+    <div style="grid-column:span 2;min-width:0"><p class="sec-t">Projeto <span style="color:var(--bad)">*</span></p><div class="types ${err("projeto")}" id="projBox">${PROJETOS.map(p=>{ const el=elemDe(d.elemento), pr=el?el.projeto:d.projeto, trava=elemControle(); return `<label><input type="radio" name="projeto" value="${p}" ${pr===p?"checked":""} ${trava?"disabled":""}> ${p}</label>`; }).join("")}</div>
+      ${elemControle()?`<p class="elemhint">Marcado automaticamente pelo elemento de débito.</p>`:""}</div>
    </div></section>
 
   <section class="panel"><header><h3>Itens</h3><span style="color:var(--muted);font-size:12.5px">10 linhas, como no formulário. Preencha só as que precisar; linhas em branco são ignoradas.</span></header>
@@ -1830,15 +1883,31 @@ function readForm(){
   d.infoComp=$("#infoComp").value.trim(); if($("#respRev")) d.respRev=$("#respRev").value.trim();
   d.chk={estoque:$("#chk-estoque").checked,espec:$("#chk-espec").checked,justif:$("#chk-justif").checked};
 }
+function elemHint(v){
+  if(!elemControle()) return "";
+  if(!String(v??"").trim()) return "";
+  const el=elemDe(v);
+  return el?`<span class="ok">✓ ${esc(el.projeto)}${el.descricao?" · "+esc(el.descricao):""}</span>`:`<span class="no">✕ Elemento não cadastrado.</span>`;
+}
+document.addEventListener("input",ev=>{
+  if(ev.target.id!=="elemento"||!elemControle()) return;
+  const el=elemDe(ev.target.value), h=$("#elemHint"); if(h) h.innerHTML=elemHint(ev.target.value);
+  document.querySelectorAll('#projBox input[name="projeto"]').forEach(r=>{ r.checked=!!el&&r.value===el.projeto; });
+});
 const isFilled = it => [it.qtd,it.codigo,it.descricao].some(v=>String(v??"").trim()!=="");
 function validate(d){
   const e=[]; const add=(k,m)=>e.push({k,m});
   if(!d.tipo) add("tipo","Marque o tipo de solicitação: Material, Serviço ou Peritagem.");
   if(d.prioridade==="emergencial" && d.infoComp.length<30) add("infoComp","RMS emergencial: explique nas Informações Complementares o motivo da emergência (equipamento parado, risco à segurança etc.).");
-  if(!d.projeto) add("projeto","Marque o projeto: Capex, Opex ou Logística.");
   if(!d.dataNec) add("dataNec","Informe a data de necessidade.");
   else if(d.dataNec<today() && !(S.editId && d.dataNec===(S.rms.find(x=>x.id===S.editId)||{}).dataNec)) add("dataNec","A data de necessidade não pode ser anterior a hoje.");
   if(!d.elemento) add("elemento","Informe o elemento de débito (PEP, CC ou Ordem).");
+  else if(elemControle()){
+    const el=elemDe(d.elemento), orig=S.editId?(S.rms.find(x=>x.id===S.editId)||{}):{};
+    if(el){ d.elemento=el.codigo; d.projeto=el.projeto; }
+    else if(!(S.editId && elemNorm(d.elemento)===elemNorm(orig.elemento))) add("elemento",`O elemento "${d.elemento}" não está cadastrado. Use um elemento da lista.`);
+  }
+  if(!d.projeto && !e.some(x=>x.k==="elemento")) add("projeto",elemControle()?"O elemento informado não define o projeto. Fale com Suprimentos.":"Marque o projeto: Capex, Opex ou Logística.");
   const used=d.itens.map((it,i)=>[it,i]).filter(([it])=>isFilled(it));
   if(!used.length) add("qtd0","Preencha pelo menos um item.");
   used.forEach(([it,i])=>{
@@ -2092,6 +2161,7 @@ function assinarDados(db, onR, onS){
   db.doc("config/sla").onSnapshot(d=>{ S.sla=d.exists?d.data():null; softRender(); }, ()=>{});
   db.doc("config/locais").onSnapshot(d=>{ S.locais=d.exists?(d.data().lista||null):null; softRender(); }, ()=>{});
   db.doc("config/compradores").onSnapshot(d=>{ S.compradores=(d.exists&&d.data().lista)||[]; softRender(); }, ()=>{});
+  db.doc("config/elementos").onSnapshot(d=>{ S.elementos=(d.exists&&d.data().lista)||[]; softRender(); }, ()=>{});
   if(db.supa) db.collection("travas").onSnapshot(snap=>{ const antes=S.openId?JSON.stringify(travaDe(S.openId)):""; const m={}; snap.docs.forEach(d=>m[d.id]=d.data()); S.travas=m; softRender(); if(S.openId && JSON.stringify(travaDe(S.openId))!==antes) renderDrawer(); }, ()=>{});
   if(db.supa) db.collection("sessoes").onSnapshot(snap=>{ S.sessoes=snap.docs.map(d=>({...d.data(),_id:d.id})); if(S.view==="gestor") softRender(); }, ()=>{});
   if(db.supa) db.collection("producao").onSnapshot(snap=>{ S.producao=snap.docs.map(d=>({...d.data(),_id:d.id})); if(S.view==="gestor") softRender(); }, ()=>{});
@@ -2870,6 +2940,7 @@ document.addEventListener("click",async ev=>{
   else if(a==="supf"){ S.supFilter=t.dataset.f; render(); }
   else if(a==="delanx"){ readForm(); const x=S.draft.anexos.splice(+t.dataset.i,1)[0]; render();
     try{ if(String(x.id).startsWith("db:")){ for(let i=0;i<(x.partes||1);i++) await S.db.doc(`anexos/${x.id.slice(3)}-${i}`).delete(); } else if(!String(x.id).startsWith("local:")) await S.assets?.delete(x.id); }catch{} }
+  else if(a==="elemdel"){ const i=+t.dataset.i, e=S.elementos[i]; if(confirm(`Remover o elemento ${e.codigo}? As RMS já emitidas com ele não mudam.`)) saveElementos(S.elementos.filter((_,j)=>j!==i), `Elemento ${e.codigo} removido.`); }
   else if(a==="cfgdel"){ const i=+t.dataset.i, c=S.compradores[i]; saveCompradores(S.compradores.filter((_,j)=>j!==i), `${c.nome} removido.`); }
   else if(a==="fwd"){ marcarEncaminhada(t.dataset.id); }
   else if(a==="copy"){ const txt=t.dataset.txt; if(t.dataset.fwd) marcarEncaminhada(t.dataset.fwd);
