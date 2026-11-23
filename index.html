@@ -523,7 +523,14 @@ body.locked .snwrap{display:none}
   .tag{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-.elemhint{display:block;min-height:16px;margin-top:4px;font-size:12px;color:var(--muted);font-weight:400}.elemhint .ok{color:#4F7A00;font-weight:600}.elemhint .no{color:var(--bad);font-weight:600}
+/* linha Elemento · Data · Projeto: títulos e caixas na mesma altura; avisos abaixo sem empurrar nada */
+.r3{align-self:start;position:relative;padding-bottom:20px}
+label.f.r3{gap:10px} label.f.r3>span:first-child{line-height:16px;min-height:16px}
+.r3 .sec-t{line-height:16px}
+.r3 .in{height:42px;box-sizing:border-box}
+.r3 .types label{height:42px;box-sizing:border-box;padding-top:0;padding-bottom:0}
+.r3 .types input{margin:0}
+.elemhint{position:absolute;left:0;bottom:0;font-size:12px;line-height:16px;color:var(--muted);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.elemhint .ok{color:#4F7A00;font-weight:600}.elemhint .no{color:var(--bad);font-weight:600}
 </style>
 
 <div class="top">
@@ -1774,12 +1781,12 @@ function viewNova(){
     <div style="grid-column:span 2;min-width:0"><p class="sec-t">Prioridade <span style="color:var(--bad)">*</span></p>
       <div class="types pr">${Object.entries(PRIOR).map(([k,p])=>`<label title="${esc(p.dica)}"><input type="radio" name="prioridade" value="${k}" ${d.prioridade===k?"checked":""}> ${p.label}</label>`).join("")}</div>
       <p style="margin:6px 0 0;font-size:12px;color:var(--muted)">${esc(PRIOR[d.prioridade]?.dica||"")}</p></div>
-    <label class="f" style="align-self:end"><span>Elemento de débito <span class="req">*</span></span><input class="in num ${err("elemento")}" id="elemento" value="${esc(d.elemento)}" placeholder="${elemControle()?"Digite ou escolha o elemento":"Elemento PEP, CC ou Ordem"}" ${elemControle()?'list="elemLista" autocomplete="off"':""}>
+    <label class="f r3"><span>Elemento de débito <span class="req">*</span></span><input class="in num ${err("elemento")}" id="elemento" value="${esc(d.elemento)}" placeholder="${elemControle()?"Digite ou escolha o elemento":"Elemento PEP, CC ou Ordem"}" ${elemControle()?'list="elemLista" autocomplete="off"':""}>
       ${elemControle()?`<datalist id="elemLista">${elemAtivos().map(e=>`<option value="${esc(e.codigo)}">${esc(e.codigo)} · ${esc(e.projeto)}${e.descricao?" · "+esc(e.descricao):""}</option>`).join("")}</datalist>`:""}
       <small id="elemHint" class="elemhint">${elemHint(d.elemento)}</small></label>
-    <label class="f" style="align-self:end"><span>Data de necessidade <span class="req">*</span></span><input class="in ${err("dataNec")}" type="date" min="${today()}" id="dataNec" value="${esc(d.dataNec)}">${elemControle()?`<small class="elemhint" aria-hidden="true"></small>`:""}</label>
-    <div style="grid-column:span 2;min-width:0"><p class="sec-t">Projeto <span style="color:var(--bad)">*</span></p><div class="types ${err("projeto")}" id="projBox">${PROJETOS.map(p=>{ const el=elemDe(d.elemento), pr=el?el.projeto:d.projeto, trava=elemControle(); return `<label><input type="radio" name="projeto" value="${p}" ${pr===p?"checked":""} ${trava?"disabled":""}> ${p}</label>`; }).join("")}</div>
-      ${elemControle()?`<p class="elemhint">Marcado automaticamente pelo elemento de débito.</p>`:""}</div>
+    <label class="f r3"><span>Data de necessidade <span class="req">*</span></span><input class="in ${err("dataNec")}" type="date" min="${today()}" id="dataNec" value="${esc(d.dataNec)}"></label>
+    <div class="r3" style="grid-column:span 2;min-width:0"><p class="sec-t">Projeto <span style="color:var(--bad)">*</span></p><div class="types ${err("projeto")}" id="projBox">${PROJETOS.map(p=>{ const el=elemDe(d.elemento), pr=el?el.projeto:d.projeto, trava=elemControle(); return `<label><input type="radio" name="projeto" value="${p}" ${pr===p?"checked":""} ${trava?"disabled":""}> ${p}</label>`; }).join("")}</div>
+      ${elemControle()?`<small class="elemhint">Marcado automaticamente pelo elemento de débito.</small>`:""}</div>
    </div></section>
 
   <section class="panel"><header><h3>Itens</h3><span style="color:var(--muted);font-size:12.5px">10 linhas, como no formulário. Preencha só as que precisar; linhas em branco são ignoradas.</span></header>
