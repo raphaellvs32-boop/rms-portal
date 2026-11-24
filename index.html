@@ -735,6 +735,14 @@ async function boot(){
 }
 
 /* Numeração automática: AAAA-NNNN, sequência anual. Reserva por lease para evitar número duplicado entre usuários. */
+/* Prévia do próximo número: no banco, olha todas as RMS (não só as do solicitante) */
+function proxPrevia(){ const y=new Date().getFullYear(); if(S.supa && Date.now()-(S._proxEm||0)>15000){ S._proxEm=Date.now(); setTimeout(atualizarProxNum,0); } return Math.max(nextSeq(y), +S.proxNum||0); }
+async function atualizarProxNum(){
+  if(!S.supa||!S.sb?.rpc||S._proxBusca) return; S._proxBusca=true;
+  try{ const {data,error}=await S.sb.rpc("rms_proximo_numero",{ano:String(new Date().getFullYear())}); if(!error && +data>0 && +data!==+S.proxNum){ S.proxNum=+data; if(S.view==="nova") softRender(); } }catch{}
+  S._proxBusca=false;
+}
+setInterval(()=>{ if(S.view==="nova"&&!document.hidden) atualizarProxNum(); },20000);
 function nextSeq(year){
   let max=0; for(const r of S.rms){ const [y,n]=String(r.id).split("-"); if(y===String(year)) max=Math.max(max,parseInt(n,10)||0); }
   return max+1;
@@ -746,7 +754,14 @@ async function claimAndSave(body){
     const id=`${year}-${String(n).padStart(4,"0")}`;
     S.rms.push({...body,id}); localSave(); return id;
   }
-  if(S.supa && S.sb?.rpc){ try{ const {data,error}=await S.sb.rpc("rms_proximo_numero",{ano:String(year)}); if(!error && +data>0) n=Math.max(n,+data); }catch{} }
+  if(S.supa && S.sb?.rpc){
+    // número e RMS gravados juntos no banco, em fila única: sequência igual para todos, sem repetir nem pular
+    const {data,error}=await comSessao(S.sb,()=>S.sb.rpc("rms_criar",{ano:String(year), dados:JSON.parse(JSON.stringify(body))}));
+    if(!error && data){ const id=String(data); if(!S.rms.some(r=>r.id===id)) S.rms.push({...body, numero:id, id}); S.proxNum=null; return id; }
+    if(error && (error.code==="42501"||/permiss/i.test(String(error.message||"")))) throw supaErr(error);
+    // função nova indisponível (SQL ainda não rodado ou falha): nada foi gravado, segue o modo anterior
+    try{ const {data,error}=await S.sb.rpc("rms_proximo_numero",{ano:String(year)}); if(!error && +data>0) n=Math.max(n,+data); }catch{}
+  }
   const holder=(S.uid||"anon")+"-"+Math.random().toString(36).slice(2,8);
   for(let tries=0; tries<40; tries++, n++){
     const id=`${year}-${String(n).padStart(4,"0")}`;
@@ -776,6 +791,7 @@ async function saveStatus(id, patch, evento, opts={}){
 function route(){
   const h=(location.hash||"#painel").slice(1);
   S.view=["painel","nova","minhas","suprimentos","almox","todas","config","dilig","indicadores","editar","gestor"].includes(h)?h:"painel";
+  if(S.view==="nova") atualizarProxNum();
   if(S.view!=="gestor") S.gestorOk=false; /* senha pedida toda vez que abrir o Painel do Gestor */
   if(S.view==="editar" && !S.editId) S.view="painel";
   if(S.view!=="editar" && S.editId){ S.editId=null; S.draft=null; S.errors=[]; }
@@ -1771,7 +1787,7 @@ function viewNova(){
     <label class="f" style="margin-top:10px">Sua resposta à revisão <span class="req">*</span><textarea class="in ${err("resposta")}" id="respRev" rows="2" placeholder="Explique o que foi ajustado.">${esc(d.respRev||"")}</textarea></label></div>`:""}
   ${ed?`<div class="editbar">Editando a RMS <strong>${esc(fmtNum(ed.id))}</strong> · status atual: ${pillOf(ed)}${lock?" · <strong>Os itens não podem ser alterados</strong> porque já há pedido de compra ou item comprado. Para mudar itens, fale com Suprimentos.":""}</div>`:""}
   <form id="frm" class="form" novalidate>
-  <section class="panel"><header><h3>Identificação da solicitação</h3><span class="num" style="color:var(--muted)">${ed?`Nº RMS ${esc(fmtNum(ed.id))} · emitida em ${fmtD(ed.dataRms)}`:`Nº RMS: próximo ${esc(fmtNum(new Date().getFullYear()+"-"+String(nextSeq(new Date().getFullYear())).padStart(4,"0")))} (confirmado ao enviar)`}</span></header>
+  <section class="panel"><header><h3>Identificação da solicitação</h3><span class="num" style="color:var(--muted)">${ed?`Nº RMS ${esc(fmtNum(ed.id))} · emitida em ${fmtD(ed.dataRms)}`:`Nº RMS: próximo ${esc(fmtNum(new Date().getFullYear()+"-"+String(proxPrevia()).padStart(4,"0")))} (confirmado ao enviar)`}</span></header>
    <div class="body grid g4">
     <label class="f" style="grid-column:span 2"><span>Solicitante <span class="req">*</span></span><input class="in ${err("solNome")}" id="solNome" value="${esc(d.solicitante.nome)}" placeholder="Nome completo" autocomplete="name"></label>
     <label class="f"><span>Matrícula <span class="req">*</span></span><input class="in num ${err("solMat")}" id="solMat" value="${esc(d.solicitante.matricula)}" placeholder="Matrícula"></label>
