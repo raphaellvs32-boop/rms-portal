@@ -3391,7 +3391,7 @@ async function pushTeste(silencioso){
   const est=await pushEstado(); d.push(linha(est.k==="ativo","Este aparelho está com os avisos ativos"));
   let r=null, j={};
   try{ const {data:{session}}=await S.sb.auth.getSession();
-    r=await fetch(RMS_SUPABASE.url+"/functions/v1/"+PUSH_FUNCAO,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(session?.access_token||""),"apikey":RMS_SUPABASE.key},body:JSON.stringify({teste:true})});
+    r=await fetch(RMS_SUPABASE.url+"/functions/v1/"+PUSH_FUNCAO,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(session?.access_token||""),"apikey":RMS_SUPABASE.key},body:JSON.stringify({teste:true, aparelho:est.sub?est.sub.toJSON():null})});
     j=await r.json().catch(()=>({}));
   }catch{ r=null; }
   if(!r){ d.push(linha(false,`Sem resposta da função de avisos: confira a internet. Se a internet está ok, a função de avisos (<b>${PUSH_FUNCAO}</b>) não está publicada no Supabase.`)); }
@@ -3401,8 +3401,9 @@ async function pushTeste(silencioso){
   else { d.push(linha(true,"Função de avisos publicada e com as chaves"));
     const f=(j.falhas&&j.falhas[0])||null;
     if(j.enviados) d.push(linha(true,`Aviso de teste enviado para ${j.enviados} aparelho(s). Deve chegar em alguns segundos.`));
-    else if(j.aparelhos===0 && j.usuarios===0) d.push(linha(false,"A função não consegue ler o banco: confira se a função tem acesso à chave de serviço (SUPABASE_SERVICE_ROLE_KEY) em Edge Functions → Secrets."));
-    else if(j.seus===0) d.push(linha(false,"A função não encontrou o seu aparelho no banco. Toque em <b>Desligar neste aparelho</b> e depois em <b>Ativar</b> de novo."));
+    else if(j.usuarios===0 && j.expirados===undefined) d.push(linha(false,"A função de avisos no Supabase está com o código antigo: cole o <b>index.ts</b> novo na função <b>dynamic-service</b> e clique em <b>Deploy updates</b>."));
+    else if(j.expirados && j.expirados.length) d.push(linha(false,"A inscrição deste aparelho expirou. Toque em <b>Desligar neste aparelho</b> e depois em <b>Ativar</b> de novo."));
+    else if(j.seus===0) d.push(linha(false,"Este aparelho ainda não está com os avisos ativos: toque em <b>Ativar avisos neste aparelho</b>."));
     else if(f && (f.status===401||f.status===403)) d.push(linha(false,`O serviço de avisos (${esc(f.servico||"")}) recusou a assinatura: as chaves <b>VAPID_PUBLIC_KEY</b> e <b>VAPID_PRIVATE_KEY</b> nos Secrets não conferem com a do portal. Cole de novo exatamente as chaves enviadas, sem espaços.`));
     else if(f) d.push(linha(false,`O serviço de avisos recusou o envio (código ${f.status}): ${esc(f.motivo||"")}`));
     else if(j.seus===undefined) d.push(linha(false,"Atualize o código da função de avisos no Supabase (versão nova com diagnóstico)."));
