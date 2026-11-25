@@ -545,6 +545,8 @@ body.so-ver [data-act="getanx"],body.so-ver [data-act="editrms"],body.so-ver [da
 .rbar{display:inline-block;vertical-align:middle;width:110px;height:8px;border-radius:4px;background:var(--surface-2,#eef2f6);overflow:hidden}.rbar span{display:block;height:100%;background:#f59e0b}
 .pushst{padding:10px 12px;border-radius:9px;font-size:13px;background:#f1f5f9;color:#334155}.pushst.ativo{background:#f1f8e0;color:#4F7A00;font-weight:600}.pushst.negado,.pushst.sem{background:#fef3c7;color:#92400e}
 @media (max-width:760px){.lb2{display:none}}
+.pushnov{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:13px}
+.pushdiag{display:grid;gap:4px;font-size:12.5px;padding:10px 12px;border-radius:9px;background:#f8fafc;border:1px dashed var(--line)}.pushdiag .dok{color:#4F7A00}.pushdiag .dno{color:#b91c1c}
 </style>
 
 <div class="top">
@@ -557,7 +559,7 @@ body.so-ver [data-act="getanx"],body.so-ver [data-act="editrms"],body.so-ver [da
     <span class="tag">USO INTERNO</span>
     <span id="bellBox" hidden><button class="bell" data-act="bell" aria-label="Notificações de novas RMS"><span aria-hidden="true">🔔</span><span id="bellN" class="bellN"></span></button></span>
     <button type="button" class="btn small primary" id="btnInstalar" hidden>Instalar app</button>
-    <span id="userBox" class="userbox" hidden><span class="tag">👤 <span id="userName"></span></span><button class="btn small" data-act="pushpainel" id="btnAvisos" title="Avisos no celular" aria-label="Avisos no celular">🔔<span class="lb2"> Avisos</span></button><button class="btn small" data-act="lgsair">Sair</button></span>
+    <span id="userBox" class="userbox" hidden><span class="tag">👤 <span id="userName"></span></span><button class="btn small" data-act="lgsair">Sair</button></span>
   </div>
 </div>
 
@@ -2890,7 +2892,7 @@ const haQuanto = iso => { const m=Math.max(0,Math.round((Date.now()-new Date(iso
 function renderSupNotif(){
   let root=$("#supNotifRoot"); if(!root){ root=document.createElement("div"); root.id="supNotifRoot"; document.body.appendChild(root); }
   const L=supNotifs().filter(x=>!(S.view==="almox"&&(x.id.startsWith("alm-")||stOf(x.r.id)==="almox"))), n=L.length;
-  const bb=$("#bellBox"); if(bb){ bb.hidden=!((S.canSup||S.canAlmox)&&S.auth?.estado==="ok"); $("#bellN").textContent=n||""; $("#bellN").hidden=!n; }
+  const bb=$("#bellBox"); if(bb){ bb.hidden=!(S.auth?.estado==="ok"); /* um sino só para todos: novidades + avisos no celular (nota 087) */ $("#bellN").textContent=n||""; $("#bellN").hidden=!n; }
   document.title=n?`(${n}) ${TITULO_BASE}`:TITULO_BASE;
   if(!n){ root.innerHTML=""; S.bellOpen=false; return; }
   const card=x=>{ const r=x.r, p=prOf(r); return `<div class="snc ${r.prioridade==="emergencial"?"emerg":r.prioridade==="urgente"?"urg":""}" role="status">
@@ -2901,7 +2903,7 @@ function renderSupNotif(){
   const vis=S.bellOpen?L:L.slice(0,3);
   root.innerHTML=`<div class="snwrap" aria-live="polite">
     ${vis.map(card).join("")}
-    <div class="snfoot">${n>3&&!S.bellOpen?`<button class="btn small" data-act="bell">Ver todas (${n})</button>`:""}${S.bellOpen&&n>3?`<button class="btn small" data-act="bell">Recolher</button>`:""}<button class="btn small" data-act="snall">Marcar ${n>1?"todas":""} como vista${n>1?"s":""}</button></div></div>`;
+    <div class="snfoot">${n>3&&!S.bellOpen?`<button class="btn small" data-act="bellver">Ver todas (${n})</button>`:""}${S.bellOpen&&n>3?`<button class="btn small" data-act="bellver">Recolher</button>`:""}<button class="btn small" data-act="snall">Marcar ${n>1?"todas":""} como vista${n>1?"s":""}</button></div></div>`;
 }
 function renderNotif(){
   const root=$("#notifRoot"); if(!root) return;
@@ -2982,7 +2984,7 @@ function renderDrawer(){
 /* ---------- Perfil Consulta: só visualização (nota 082) ----------
    Ações liberadas: navegar, filtrar, ordenar, abrir/fechar, copiar, exportar. Todo o resto é barrado aqui
    (e também no banco, pela regra do Supabase). */
-const CONSULTA_OK=new Set(["pushpainel","pushfechar","pushativ","pushdesl","pushteste","open","close","okclose","dilclose","almtab","bell","clear","colall","colclose","colf","colnone","colx","colxall","copy","dilf","dsort","filter","indclear","indgo","indpdf","indper","ini","iniopen","kfilter","lgsair","lgver","ltinv","ltmed","ltsel","minf","notifok","notifver","pg","snall","snok","snopen","supf","xlsx"]);
+const CONSULTA_OK=new Set(["bell","bellver","pushpainel","pushfechar","pushativ","pushdesl","pushteste","open","close","okclose","dilclose","almtab","bell","clear","colall","colclose","colf","colnone","colx","colxall","copy","dilf","dsort","filter","indclear","indgo","indpdf","indper","ini","iniopen","kfilter","lgsair","lgver","ltinv","ltmed","ltsel","minf","notifok","notifver","pg","snall","snok","snopen","supf","xlsx"]);
 document.addEventListener("click",ev=>{
   if(!S.consulta) return; const t=ev.target.closest("[data-act]"); if(!t) return;
   if(CONSULTA_OK.has(t.dataset.act)) return;
@@ -3093,7 +3095,8 @@ document.addEventListener("click",async ev=>{
   else if(a==="snok"){ await marcarVistas([t.dataset.n]); renderSupNotif(); }
   else if(a==="snall"){ await marcarVistas(supNotifs().map(x=>x.id)); renderSupNotif(); }
   else if(a==="snopen"){ await marcarVistas([t.dataset.n]); if(!S.canSup){ if(S.view!=="almox") location.hash="#almox"; } else if(!["suprimentos","dilig","indicadores","almox"].includes(S.view)) location.hash="#suprimentos"; setTimeout(()=>{ S.openId=t.dataset.id; renderDrawer(); renderSupNotif(); },50); }
-  else if(a==="bell"){ S.bellOpen=!S.bellOpen; renderSupNotif(); if(!supNotifs().length) toast("Nenhuma RMS nova no momento."); }
+  else if(a==="bell"){ S.pushAberto=true; renderPush(); }
+  else if(a==="bellver"){ S.pushAberto=false; renderPush(); S.bellOpen=!S.bellOpen; renderSupNotif(); if(!supNotifs().length) toast("Nenhuma RMS nova no momento."); }
   else if(a==="notifok"){ if(t.classList.contains("overlay") && ev.target!==t) return; await marcarVistas(minhasNotif().map(n=>n.id)); renderNotif(); }
   else if(a==="notifver"){ await marcarVistas([t.dataset.n]); S.openId=t.dataset.id; renderDrawer(); renderNotif(); }
   else if(a==="indpdf"){ t.disabled=true; try{ await gerarPdf(); }catch(e){ console.error(e); toast("Não foi possível gerar o PDF. Tente de novo."); } t.disabled=false; }
@@ -3374,11 +3377,23 @@ async function pushDesativar(){
   const est=await pushEstado(); if(est.sub){ const id=await idAparelho(est.sub.endpoint); try{ await S.db.doc("push/"+id).delete(); }catch{} await est.sub.unsubscribe(); }
   try{ localStorage.removeItem("rms-push-ok"); }catch{} toast("Avisos desligados neste aparelho."); renderPush();
 }
+/* Teste + diagnóstico: diz exatamente qual passo da configuração está faltando */
 async function pushTeste(silencioso){
+  const linha=(ok,t)=>`<div class="${ok?"dok":"dno"}">${ok?"✔":"✖"} ${t}</div>`; let d=[];
+  const est=await pushEstado(); d.push(linha(est.k==="ativo","Este aparelho está com os avisos ativos"));
+  let r=null, j={};
   try{ const {data:{session}}=await S.sb.auth.getSession();
-    const r=await fetch(RMS_SUPABASE.url+"/functions/v1/rms-push",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(session?.access_token||""),"apikey":RMS_SUPABASE.key},body:JSON.stringify({teste:true})});
-    const j=await r.json().catch(()=>({})); if(!silencioso) toast(r.ok&&j.enviados?"Aviso de teste enviado. Ele chega em alguns segundos.":"O servidor de avisos ainda não está configurado no Supabase (nota 087).");
-  }catch{ if(!silencioso) toast("Sem conexão com o servidor de avisos."); }
+    r=await fetch(RMS_SUPABASE.url+"/functions/v1/rms-push",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(session?.access_token||""),"apikey":RMS_SUPABASE.key},body:JSON.stringify({teste:true})});
+    j=await r.json().catch(()=>({}));
+  }catch{ r=null; }
+  if(!r){ d.push(linha(false,"Sem resposta da função de avisos: confira a internet. Se a internet está ok, a função <b>rms-push</b> ainda não foi publicada no Supabase.")); }
+  else if(r.status===404){ d.push(linha(false,"A função <b>rms-push</b> não foi encontrada no Supabase (Edge Functions). Publique com esse nome exato.")); }
+  else if(r.status===401){ d.push(linha(true,"Função rms-push publicada")); d.push(linha(false,"A função recusou o acesso: desligue <b>Verify JWT / Enforce JWT Verification</b> nos detalhes da função.")); }
+  else if(!r.ok){ d.push(linha(true,"Função rms-push publicada")); d.push(linha(false,/VAPID/.test(j.erro||"")?"Faltam as chaves <b>VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY</b> em Edge Functions → Secrets.":"Erro na função: "+esc(j.erro||("código "+r.status)))); }
+  else { d.push(linha(true,"Função rms-push publicada e com as chaves"));
+    d.push(j.enviados?linha(true,`Aviso de teste enviado para ${j.enviados} aparelho(s). Deve chegar em alguns segundos.`):linha(false,"Nenhum aparelho seu cadastrado no banco. Toque em <b>Ativar avisos neste aparelho</b>; se já ativou, rode o <b>push.sql</b> no SQL Editor.")); }
+  S.pushDiag=d.join(""); if(!silencioso||!(r&&r.ok&&j.enviados)) renderPush();
+  if(!silencioso) toast(r&&r.ok&&j.enviados?"Aviso de teste enviado.":"Os avisos ainda não estão prontos: veja o que falta no painel.");
 }
 async function renderPush(){
   let root=$("#pushRoot"); if(!root){ root=document.createElement("div"); root.id="pushRoot"; document.body.appendChild(root); }
@@ -3390,17 +3405,20 @@ async function renderPush(){
   root.innerHTML=`<div class="overlay center" data-act="pushfechar"><div class="notif" role="dialog" aria-modal="true" aria-labelledby="pushTit" style="max-width:460px">
     <header><h3 id="pushTit">🔔 Avisos no celular</h3></header>
     <div style="padding:14px 18px;display:grid;gap:12px">
+      ${(S.canSup||S.canAlmox)?(()=>{ const n=supNotifs().length; return `<div class="pushnov"><span>${n?`<strong>${n}</strong> novidade(s) no portal`:"Nenhuma novidade no portal agora"}</span>${n?`<button class="btn small" data-act="bellver">Ver novidades</button>`:""}</div>`; })():""}
+      <div style="font-weight:700;font-size:13.5px">📲 Avisos no celular</div>
       <div class="pushst ${est.k}">${esc(est.txt)}</div>
+      ${S.pushDiag?`<div class="pushdiag">${S.pushDiag}</div>`:""}
       <div><strong style="font-size:13px">Você vai receber:</strong><ul style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--muted)">${lista.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${est.k==="ativo"?`<button class="btn primary" data-act="pushteste">Enviar aviso de teste</button><button class="btn" data-act="pushdesl">Desligar neste aparelho</button>`:est.k==="inativo"?`<button class="btn primary" data-act="pushativ">Ativar avisos neste aparelho</button>`:""}
+        ${est.k==="ativo"?`<button class="btn primary" data-act="pushteste">Enviar aviso de teste</button><button class="btn" data-act="pushdesl">Desligar neste aparelho</button>`:est.k==="inativo"?`<button class="btn primary" data-act="pushativ">Ativar avisos neste aparelho</button><button class="btn" data-act="pushteste">Verificar configuração</button>`:`<button class="btn" data-act="pushteste">Verificar configuração</button>`}
         <button class="btn" data-act="pushfechar">Fechar</button></div>
       <p class="sub" style="margin:0">Cada aparelho é ativado separadamente (celular, computador). Os avisos chegam mesmo com o app fechado.</p></div></div></div>`;
 }
 document.addEventListener("click",async ev=>{ const t=ev.target.closest("[data-act]"); if(!t) return; const a=t.dataset.act;
   if(a==="pushpainel"){ S.pushAberto=true; renderPush(); }
   else if(a==="pushfechar"){ if(t.classList.contains("overlay")&&ev.target!==t) return; S.pushAberto=false; renderPush(); }
-  else if(a==="pushativ"){ t.disabled=true; try{ await pushAtivar(); }catch(e){ console.error(e); toast(/permission|denied|NotAllowed/i.test(String(e?.message||e))?"O navegador não permitiu receber avisos. Libere as notificações do Portal RMS nas configurações do navegador e tente de novo.":/network|push service|AbortError/i.test(String(e?.message||e))?"Sem conexão com o serviço de avisos do celular. Confira a internet e tente de novo.":"Não foi possível ativar os avisos: "+(e?.message||e)); renderPush(); } }
+  else if(a==="pushativ"){ t.disabled=true; try{ await pushAtivar(); }catch(e){ console.error(e); toast(e?.code==="permission_denied"||/row-level security|42501/i.test(String(e?.message||""))?"O banco ainda não aceita cadastrar aparelhos: rode o push.sql no SQL Editor do Supabase.":/permission|denied|NotAllowed/i.test(String(e?.message||e))?"O navegador não permitiu receber avisos. Libere as notificações do Portal RMS nas configurações do navegador e tente de novo.":/network|push service|AbortError/i.test(String(e?.message||e))?"Sem conexão com o serviço de avisos do celular. Confira a internet e tente de novo.":"Não foi possível ativar os avisos: "+(e?.message||e)); renderPush(); } }
   else if(a==="pushdesl"){ await pushDesativar(); }
   else if(a==="pushteste"){ await pushTeste(false); } });
 if("serviceWorker" in navigator && (location.protocol==="https:"||["localhost","127.0.0.1"].includes(location.hostname))) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(e=>console.warn("sw",e)));
