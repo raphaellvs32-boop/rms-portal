@@ -3360,13 +3360,20 @@ async function pushEstado(){
   if(!pushSuportado()) return {k:"sem", txt: ehIphone()&&!appInstalado() ? "No iPhone, primeiro instale o app: Compartilhar → Adicionar à Tela de Início. Depois abra pelo ícone e ative aqui." : "Este navegador não recebe avisos. Use o Chrome (Android/computador) ou o app instalado no iPhone."};
   if(Notification.permission==="denied") return {k:"negado", txt:"Os avisos foram bloqueados neste aparelho. Libere em Configurações do navegador → Notificações → Portal RMS."};
   const reg=await navigator.serviceWorker.getRegistration(); const sub=reg && await reg.pushManager.getSubscription();
-  return sub ? {k:"ativo", sub, txt:"Avisos ativos neste aparelho."} : {k:"inativo", txt:"Avisos desligados neste aparelho."};
+  if(!sub) return {k:"inativo", txt:"Avisos desligados neste aparelho."};
+  // o aparelho pode ter sido ativado por OUTRA pessoa: só vale como "ativo" se o cadastro for da pessoa logada (nota 087)
+  let meu=false; try{ const d=await S.db.doc("push/"+await idAparelho(sub.endpoint)).get(); meu=!!(d.exists && d.data()?.uid===S.uid); }catch{}
+  return meu ? {k:"ativo", sub, txt:"Avisos ativos neste aparelho para você."} : {k:"inativo", subAntiga:sub, txt:"Avisos desligados para você neste aparelho."};
 }
+/* Ao sair do portal, o aparelho deixa de receber os avisos desta pessoa (evita que outra pessoa no mesmo aparelho receba) */
+async function pushSair(){ try{ if(!pushSuportado()) return; const reg=await navigator.serviceWorker.getRegistration(); const sub=reg&&await reg.pushManager.getSubscription(); if(!sub) return;
+  try{ await S.db.doc("push/"+await idAparelho(sub.endpoint)).delete(); }catch{} await sub.unsubscribe(); }catch{} }
 async function pushAtivar(){
   if(!S.supa||!S.uid){ toast("Entre no portal para ativar os avisos."); return; }
   const est=await pushEstado(); if(est.k==="sem"||est.k==="negado"){ toast(est.txt); return renderPush(); }
   const perm=await Notification.requestPermission(); if(perm!=="granted"){ toast("Sem permissão para avisos. Você pode liberar depois nas configurações do navegador."); return renderPush(); }
   const reg=await navigator.serviceWorker.register("sw.js"); await navigator.serviceWorker.ready;
+  if(est.subAntiga){ try{ await est.subAntiga.unsubscribe(); }catch{} }   // cadastro antigo de outra pessoa: troca por um novo, desta pessoa
   let sub=await reg.pushManager.getSubscription(); if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64uParaBytes(VAPID_PUBLICA)});
   const j=sub.toJSON(), id=await idAparelho(j.endpoint);
   await S.db.doc("push/"+id).set({uid:S.uid, email:S.auth?.user?.email||"", endpoint:j.endpoint, keys:j.keys, aparelho:navigator.userAgent.slice(0,140), em:new Date().toISOString()});
@@ -3401,7 +3408,8 @@ async function renderPush(){
   const est=await pushEstado(), P=S.isAdmin?"administrador":S.consulta?"consulta":S.canSup?"suprimentos":S.canAlmox?"almoxarifado":"solicitante";
   const lista={solicitante:["RMS devolvida para ajuste","PR criada · pedido emitido","Material entregue · atendida pelo estoque","RMS cancelada ou recusada"],
     almoxarifado:["Nova RMS para conferir (emergencial em destaque)"], suprimentos:["Nova RMS em análise · liberada pelo Almoxarifado","RMS emergencial","PRs bloqueadas há mais de 5 dias (todo dia útil às 8h)"],
-    administrador:["Tudo de Suprimentos","RMS emergencial","Entrega com restrição registrada","PRs no farol vermelho (todo dia útil às 8h)"], consulta:["(o perfil Consulta não recebe avisos)"]}[P];
+    administrador:["Nova RMS em análise · liberada pelo Almoxarifado","RMS emergencial","PRs bloqueadas há mais de 5 dias (todo dia útil às 8h)","Entrega com restrição registrada","PRs no farol vermelho (todo dia útil às 8h)"], consulta:["(o perfil Consulta não recebe avisos)"]}[P];
+  const nomeP={solicitante:"Solicitante",almoxarifado:"Almoxarifado",suprimentos:"Suprimentos",administrador:"Administrador",consulta:"Consulta"}[P];
   root.innerHTML=`<div class="overlay center" data-act="pushfechar"><div class="notif" role="dialog" aria-modal="true" aria-labelledby="pushTit" style="max-width:460px">
     <header><h3 id="pushTit">🔔 Avisos no celular</h3></header>
     <div style="padding:14px 18px;display:grid;gap:12px">
@@ -3409,7 +3417,7 @@ async function renderPush(){
       <div style="font-weight:700;font-size:13.5px">📲 Avisos no celular</div>
       <div class="pushst ${est.k}">${esc(est.txt)}</div>
       ${S.pushDiag?`<div class="pushdiag">${S.pushDiag}</div>`:""}
-      <div><strong style="font-size:13px">Você vai receber:</strong><ul style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--muted)">${lista.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
+      <div><strong style="font-size:13px">Seu perfil: ${nomeP} · você vai receber:</strong><ul style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--muted)">${lista.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${est.k==="ativo"?`<button class="btn primary" data-act="pushteste">Enviar aviso de teste</button><button class="btn" data-act="pushdesl">Desligar neste aparelho</button>`:est.k==="inativo"?`<button class="btn primary" data-act="pushativ">Ativar avisos neste aparelho</button><button class="btn" data-act="pushteste">Verificar configuração</button>`:`<button class="btn" data-act="pushteste">Verificar configuração</button>`}
         <button class="btn" data-act="pushfechar">Fechar</button></div>
@@ -3478,7 +3486,7 @@ document.addEventListener("click", ev=>{
   else if(a==="lgesqueci"){ S.auth.modo="esqueci"; S.auth.erro=""; S.auth.info=""; renderLogin(); }
   else if(a==="lgprimeiro"){ S.auth.modo="primeiro"; S.auth.erro=""; S.auth.info=""; renderLogin(); }
   else if(a==="lgvoltar"){ S.auth.modo="login"; S.auth.erro=""; S.auth.info=""; S.auth.pend=null; renderLogin(); }
-  else if(a==="lgsair" && S.supa){ (S.minhaTrava?travaRpc("rms_liberar",S.minhaTrava):Promise.resolve()).then(()=>S.sb.auth.signOut()).finally(()=>{ try{ sessionStorage.clear(); }catch{} location.hash="#painel"; location.reload(); }); }
+  else if(a==="lgsair" && S.supa){ (S.minhaTrava?travaRpc("rms_liberar",S.minhaTrava):Promise.resolve()).then(()=>pushSair()).then(()=>S.sb.auth.signOut()).finally(()=>{ try{ sessionStorage.clear(); }catch{} location.hash="#painel"; location.reload(); }); }
   else if(a==="lgsair" && !S.supa){ try{ sessionStorage.removeItem(SESS_KEY); }catch{} const m=memLer(); if(m) memGravar({email:m.email, ate:null}); S.auth.estado="pendente"; S.auth.modo="login"; S.auth.erro=""; S.auth.user=null; S.canSup=!!S.claudeSup; S.isAdmin=false; S.canAlmox=false; S.consulta=false; S.verTudo=S.canSup; renderLogin(); }
 });
 
