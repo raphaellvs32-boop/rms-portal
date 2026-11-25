@@ -535,6 +535,14 @@ label.f.r3{gap:10px} label.f.r3>span:first-child{line-height:16px;min-height:16p
 body.so-ver [data-act="getanx"],body.so-ver [data-act="editrms"],body.so-ver [data-act="diledit"],body.so-ver [data-act="buy"],body.so-ver [data-act="bulkapply"],body.so-ver [data-act="bulkfull"],body.so-ver [data-act="tacao"],body.so-ver [data-act="adec"],body.so-ver [data-act="aconcluir"],body.so-ver [data-act="fwd"],body.so-ver [data-act="avisar"],body.so-ver [data-act="impfile"],body.so-ver [data-act="impgo"]{display:none!important}
 .usrres{font-size:12px;color:var(--muted);font-weight:400;line-height:1.4}
 .btn.danger{color:var(--bad);border-color:currentColor}
+.restr{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;background:#fef3c7;color:#92400e;border:1px solid #fcd34d}
+.restr.ok{background:transparent;color:var(--muted);border-color:var(--line);font-weight:500}
+.restrbox{border:1px solid #fcd34d;border-radius:10px;padding:10px 14px 12px;background:color-mix(in srgb,#fef3c7 35%,transparent)}
+.restrbox .rgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;width:100%}
+.restrbox{display:block!important;min-width:0}
+.restrbox legend{font-weight:700;font-size:12.5px;padding:0 6px;color:#92400e} .restrbox .span3{grid-column:span 3} .restrbox .full{grid-column:1/-1}
+@media (max-width:760px){.restrbox .rgrid{grid-template-columns:1fr}.restrbox .span3{grid-column:auto}}
+.rbar{display:inline-block;vertical-align:middle;width:110px;height:8px;border-radius:4px;background:var(--surface-2,#eef2f6);overflow:hidden}.rbar span{display:block;height:100%;background:#f59e0b}
 </style>
 
 <div class="top">
@@ -989,8 +997,15 @@ function leadTime(r){
   if(!de || !sx.dataRcPr) return null;
   return diasUteis(sx.dataRcPr, de);
 }
-const DIL_TABS=[["sempedido","Sem pedido"],["nao","Não entregue"],["parcial","Entregue parcial"],["entregue","Entregue"],["vencida","Remessa vencida"],["bloq","PR bloqueada"],["sempr","Itens sem PR"],["todas","Todas"]];
-function dilMatch(r,f){ if(f==="todas") return true; if(f==="sempr") return temPendente(r); if(f==="vencida") return vencida(r); if(f==="bloq") return prBloq(r); return entregaOf(r).k===f; }
+const DIL_TABS=[["sempedido","Sem pedido"],["nao","Não entregue"],["parcial","Entregue parcial"],["entregue","Entregue"],["restr","Com restrição"],["vencida","Remessa vencida"],["bloq","PR bloqueada"],["sempr","Itens sem PR"],["todas","Todas"]];
+/* Entrega com restrição (nota 083): material entregue, retido no almoxarifado até resolver NF/pedido */
+const RESTR={financeiro:"Financeiro", suprimentos:"Suprimentos", logistica:"Logística"};
+const restrOf = r => { const x=(S.dilig[r.id]||{}).restricao; return x&&RESTR[x.tipo]?x:null; };
+const restrHist = r => (S.dilig[r.id]||{}).restricoes||[];
+const diasEntre = (a,b) => Math.max(0,Math.round((Date.parse(b||today())-Date.parse(a))/864e5));
+function restrCell(r){ const x=restrOf(r); if(!x) return entregaOf(r).k==="nao"||entregaOf(r).k==="sempedido"?`<span class="sub">—</span>`:`<span class="restr ok">Sem restrição</span>`;
+  const d=diasEntre(x.desde); return `<span class="restr" title="${esc(x.obs||"")}">${RESTR[x.tipo]}</span><div class="sub">há ${d} dia${d===1?"":"s"}</div>`; }
+function dilMatch(r,f){ if(f==="todas") return true; if(f==="restr") return !!restrOf(r); if(f==="sempr") return temPendente(r); if(f==="vencida") return vencida(r); if(f==="bloq") return prBloq(r); return entregaOf(r).k===f; }
 function dilList(){
   const base=S.rms.filter(r=>!isNeg(r.id)&&!foraSup(r.id)), q=S.dilQ.trim().toLowerCase();
   let l=base.filter(r=>dilMatch(r,S.dilFilter));
@@ -1029,7 +1044,7 @@ async function exportXlsx(){
         "Data de necessidade":d(necOf(r)),"Status RMS":STATUS[stOf(r.id)].label,"Nº PR":sx.rcPr||"","Data PR":d(sx.dataRcPr),"Aprovação PR":d(sx.dataAprovPr),"Nº RC":sx.rcNum||"","PR bloqueada":prBloq(r)?"Sim":"Não","Dias com o gerente":diasGerente(r)??"",
         "Grupo de compras":grupoLabel(sx),"Tipo de compra":sx.tipoCompra||"","Nº Pedido":x.pedido||"","Data do pedido":d(x.dataPedido),"Fornecedor":x.fornecedor||"","Data de remessa":d(x.dataRemessa),
         "Remessa vencida":itemVencido(x)?"Sim":"Não","Nota fiscal":x.nf||"","Qtd entregue":en,"Qtd pendente":Math.max(0,x.qtd-en),"Situação do item":ENT[itemSit(x)].l,"Data da entrega":d(x.dataEntrega),
-        "Obs. do item":x.obs||"","Situação da RMS":ENT[entregaOf(r).k].l,"Lead time RMS PR→entrega (dias)":leadTime(r)??"","Dias em aberto":diasAberto(r),"Observação geral":dg.obs||""}); }); });
+        "Obs. do item":x.obs||"","Situação da RMS":ENT[entregaOf(r).k].l,"Lead time RMS PR→entrega (dias)":leadTime(r)??"","Dias em aberto":diasAberto(r),"Observação geral":dg.obs||"","Entrega com restrição":dg.restricao&&RESTR[dg.restricao.tipo]?RESTR[dg.restricao.tipo]:"Sem restrição","Restrição desde":dg.restricao?.desde?fmtD(dg.restricao.desde):"","Motivo da restrição":dg.restricao?.obs||""}); }); });
   if(!rows.length){ toast("Não há linhas nesta aba para exportar."); return; }
   const ws=XLSX.utils.json_to_sheet(rows,{cellDates:true,dateNF:"dd/mm/yyyy"});
   const keys=Object.keys(rows[0]);
@@ -1048,8 +1063,8 @@ function viewDilig(){
   <section class="panel"><header><div class="seg" role="group" aria-label="Situação">
     ${DIL_TABS.map(([k,t])=>`<button data-act="dilf" data-f="${k}" aria-pressed="${S.dilFilter===k}">${t} (${base.filter(r=>dilMatch(r,k)).length})</button>`).join("")}
   </div><input id="dilQ" class="search" type="search" placeholder="Buscar RMS, pedido, fornecedor, NF…" value="${esc(S.dilQ)}" aria-label="Buscar"></header>
-  ${loadingOr(!l.length?`<div class="empty">Nenhuma RMS nesta situação.</div>`:`<div class="tw"><table class="dil"><colgroup><col style="width:140px"><col style="width:112px"><col style="width:150px"><col style="width:180px"><col style="width:100px"><col style="width:112px"><col style="width:150px"><col style="width:96px"><col style="width:92px"><col style="width:68px"><col style="width:80px"><col style="width:80px"><col style="width:136px"><col style="width:112px"></colgroup>
-  <thead><tr>${sth("rms","Nº RMS")}${sth("prioridade","Prioridade")}${sth("solicitante","Solicitante")}${sth("itens","Itens")}${sth("pr","PR")}${sth("pedido","Pedido")}${sth("fornecedor","Fornecedor")}${sth("remessa","Remessa")}<th>Nota fiscal</th><th class="r">Qtd total</th><th class="r">Qtd entregue</th>${sth("pendente","Qtd pendente","r")}${sth("entrega","Entrega")}<th></th></tr></thead><tbody>
+  ${loadingOr(!l.length?`<div class="empty">Nenhuma RMS nesta situação.</div>`:`<div class="tw"><table class="dil"><colgroup><col style="width:140px"><col style="width:112px"><col style="width:150px"><col style="width:180px"><col style="width:100px"><col style="width:112px"><col style="width:150px"><col style="width:96px"><col style="width:92px"><col style="width:68px"><col style="width:80px"><col style="width:80px"><col style="width:136px"><col style="width:132px"><col style="width:112px"></colgroup>
+  <thead><tr>${sth("rms","Nº RMS")}${sth("prioridade","Prioridade")}${sth("solicitante","Solicitante")}${sth("itens","Itens")}${sth("pr","PR")}${sth("pedido","Pedido")}${sth("fornecedor","Fornecedor")}${sth("remessa","Remessa")}<th>Nota fiscal</th><th class="r">Qtd total</th><th class="r">Qtd entregue</th>${sth("pendente","Qtd pendente","r")}${sth("entrega","Entrega")}<th>Entrega com restrição</th><th></th></tr></thead><tbody>
   ${pg.items.map(r=>{ const sx=S.status[r.id]||{}, dg=S.dilig[r.id]||{}, e=entregaOf(r), id=esc(r.id), its=r.itens||[], peds=pedidosOf(r), rd=proxRemessa(r), ven=vencida(r);
     return `<tr class="dlrow ${S.dilEdit===r.id?"sel":""}">
     <td><button class="btn link num" data-act="open" data-id="${id}" style="padding:0">${esc(fmtNum(r.id))}</button><div style="margin-top:4px">${pillOf(r)}</div></td>
@@ -1063,6 +1078,7 @@ function viewDilig(){
     <td class="num"><div class="clamp">${listaCurta(nfsOf(r))}</div></td>
     <td class="num r">${nfmt(e.total)}</td><td class="num r">${nfmt(e.ent)}</td><td class="num r" style="${e.pend>0&&e.ent>0?"color:var(--warn);font-weight:700":""}">${nfmt(e.pend)}</td>
     <td>${entPill(r)}${e.k==="entregue"&&ultimaEntrega(r)?`<div class="sub">em ${fmtD(ultimaEntrega(r))}</div>`:""}${temPendente(r)?`<div><span class="pendchip" style="margin-top:4px" title="Itens sem PR: ${pendentesOf(r).map(i=>i+1).join(", ")}">${pendentesOf(r).length} item(ns) sem PR</span></div>`:""}</td>
+    <td>${restrCell(r)}</td>
     <td class="r">${travaDe(r.id)?travaChip(r.id):`<button class="btn small primary" data-act="diledit" data-id="${id}">Diligenciar</button>`}</td></tr>`;}).join("")}
   </tbody></table></div>${pg.html}`)}</section>
   <div class="note">PR, pedidos, fornecedores, notas fiscais, quantidades e observações ficam visíveis só para Suprimentos. Cada item pode ter pedido, fornecedor, remessa e NF próprios. Com saldo pendente em algum item, a RMS fica como <strong>Entregue parcial</strong>.</div>`;
@@ -1105,6 +1121,10 @@ function dilForm(r){
       <input class="in num" id="b-pedido" placeholder="Nº Pedido"><input class="in" type="date" id="b-dataPedido" title="Data do pedido"><input class="in" id="b-fornecedor" placeholder="Fornecedor"><input class="in" type="date" id="b-dataRemessa" title="Data de remessa"><input class="in num" id="b-nf" placeholder="Nota fiscal">
       <button class="btn small" data-act="bulkapply">Aplicar aos marcados</button><button class="btn small" data-act="bulkfull" title="Marca a quantidade total como entregue nos itens marcados">Entregue total</button></div>`:""}
     ${its.map(card).join("")}</fieldset>
+   <fieldset class="full restrbox"><legend>Entrega com restrição</legend><div class="rgrid">
+    <label class="f">Restrição<select class="in" id="rs-${id}">${[["","Sem restrição"],...Object.entries(RESTR)].map(([k,l])=>`<option value="${k}" ${((dg.restricao||{}).tipo||"")===k?"selected":""}>${l}</option>`).join("")}</select></label>
+    <label class="f span3">Motivo da restrição<input class="in" id="rso-${id}" value="${esc((dg.restricao||{}).obs||"")}" placeholder="Ex.: NF com valor divergente do pedido"></label>
+    <p class="sub full" style="margin:0">Use quando o material já foi entregue mas está retido no almoxarifado por ajuste de NF ou pedido. Ao voltar para "Sem restrição", a liberação fica registrada para o indicador.${dg.restricao&&RESTR[dg.restricao.tipo]?` Restrito desde ${fmtD(dg.restricao.desde)}.`:""}</p></div></fieldset>
    <label class="f full">Observação geral<textarea class="in" rows="2" id="ob-${id}" placeholder="Contato, follow-up, pendências…">${esc(dg.obs||"")}</textarea></label>
    <div class="actions full"><button class="btn" data-act="diledit" data-id="${id}">Cancelar</button><button class="btn primary" data-act="dilsave" data-id="${id}">Salvar diligenciamento</button></div>
   </div>`;
@@ -1299,6 +1319,35 @@ function spotPanel(){
    </tbody></table></div>${S._pgA.html}
    <p class="sub">Spot em aberto = RMS com tipo de compra Spot ainda não concluída, cancelada ou recusada. Dias úteis desde a emissão da RMS. Mostra a situação atual (não depende do período), respeitando os filtros de Projeto e Comprador. Faixas editáveis em Configurações.</p>`;
 }
+/* Indicador: pedidos entregues com restrição, mês a mês (nota 083) */
+function restrPanel(){
+  const R=S.rms.filter(r=>passaFiltro(r));
+  const abertas=R.map(r=>({r,x:restrOf(r)})).filter(o=>o.x), fechadas=R.flatMap(r=>restrHist(r).map(x=>({r,x})));
+  const todas=[...abertas,...fechadas], ym=d=>String(d||"").slice(0,7);
+  const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length*10)/10:null;
+  const porTipo=k=>abertas.filter(o=>o.x.tipo===k).length;
+  const hoje=today(), meses=[]; { const d=new Date(hoje+"T12:00:00"); d.setDate(1); for(let i=5;i>=0;i--){ const m=new Date(d); m.setMonth(d.getMonth()-i); meses.push(m.toISOString().slice(0,7)); } }
+  const nomeMes=m=>{ const [y,mm]=m.split("-"); return ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"][+mm-1]+"/"+y.slice(2); };
+  const fimMes=m=>{ const [y,mm]=m.split("-").map(Number); return new Date(Date.UTC(y,mm,0)).toISOString().slice(0,10); };
+  const linhas=meses.map(m=>{ const nov=todas.filter(o=>ym(o.x.desde)===m), lib=fechadas.filter(o=>ym(o.x.ate)===m), fim=m===ym(hoje)?hoje:fimMes(m);
+    const emAb=todas.filter(o=>o.x.desde<=fim && (!o.x.ate || o.x.ate>fim)).length;
+    return {m, f:nov.filter(o=>o.x.tipo==="financeiro").length, s:nov.filter(o=>o.x.tipo==="suprimentos").length, l:nov.filter(o=>o.x.tipo==="logistica").length, t:nov.length, lib:lib.length, emAb, med:avg(lib.map(o=>diasEntre(o.x.desde,o.x.ate)))}; });
+  const mx=Math.max(1,...linhas.map(x=>x.emAb));
+  const kpi=(l,v,sub,cls="")=>`<div class="kpi ${cls}" style="cursor:default"><span class="l">${l}</span><span class="v">${v}</span><span class="s">${sub}</span></div>`;
+  const medAb=avg(abertas.map(o=>diasEntre(o.x.desde))), medLib=avg(fechadas.map(o=>diasEntre(o.x.desde,o.x.ate)));
+  return `<div class="kpis" style="margin-bottom:14px">
+      ${kpi("Com restrição agora",abertas.length,`Financeiro ${porTipo("financeiro")} · Suprimentos ${porTipo("suprimentos")} · Logística ${porTipo("logistica")}`,abertas.length?"e":"")}
+      ${kpi("Tempo médio retido",medAb==null?"—":nfmt(medAb)+" d","restrições em aberto, até hoje")}
+      ${kpi("Liberadas (6 meses)",linhas.reduce((a,x)=>a+x.lib,0),medLib==null?"sem liberações registradas":`média de ${nfmt(medLib)} d até liberar`)}
+    </div>
+    <div class="tw"><table class="mx"><thead><tr><th>Mês</th><th class="r">Financeiro</th><th class="r">Suprimentos</th><th class="r">Logística</th><th class="r">Novas</th><th class="r">Liberadas</th><th class="r">Média p/ liberar</th><th style="min-width:160px">Em aberto no fim do mês</th></tr></thead><tbody>
+      ${linhas.map(x=>`<tr><td><strong>${nomeMes(x.m)}</strong>${x.m===ym(hoje)?` <span class="sub">(até hoje)</span>`:""}</td><td class="num r">${x.f}</td><td class="num r">${x.s}</td><td class="num r">${x.l}</td><td class="num r"><strong>${x.t}</strong></td><td class="num r">${x.lib}</td><td class="num r">${x.med==null?"—":nfmt(x.med)+" d"}</td>
+        <td><span class="rbar"><span style="width:${Math.round(x.emAb/mx*100)}%"></span></span> <span class="num">${x.emAb}</span></td></tr>`).join("")}
+    </tbody></table></div>
+    ${abertas.length?`<div class="tw" style="margin-top:14px"><table><thead><tr><th>Nº RMS</th><th>Restrição</th><th>Desde</th><th class="r">Dias retido</th><th>Motivo</th></tr></thead><tbody>
+      ${abertas.sort((a,b)=>a.x.desde.localeCompare(b.x.desde)).map(({r,x})=>`<tr class="click" data-act="open" data-id="${esc(r.id)}"><td class="num">${esc(fmtNum(r.id))}</td><td><span class="restr">${RESTR[x.tipo]}</span></td><td class="num">${fmtD(x.desde)}</td><td class="num r">${diasEntre(x.desde)}</td><td>${esc(x.obs||"—")}</td></tr>`).join("")}
+    </tbody></table></div>`:`<div class="empty" style="padding:16px">Nenhum pedido entregue com restrição no momento.</div>`}`;
+}
 function viewIndicadores(){
   const L=S.rms.filter(r=>noPeriodo(r)&&passaFiltro(r)), c=indCalc(L);
   const temAnt=(S.indPer||"todos")!=="todos", p=temAnt?indCalc(S.rms.filter(r=>noPeriodo(r,1)&&passaFiltro(r))):null;
@@ -1390,6 +1439,7 @@ function viewIndicadores(){
     return panel("Tempo da PR com o gerente (PRs aprovadas)",ap.length?`${ap.length} PR(s) · média ${fdN(avgN(ap.map(x=>x.d)))} · maior ${fdN(ap[0].d)}`:"",ap.length?`<div class="tw"><table><thead><tr><th>Nº RMS</th><th>Nº PR</th><th>Criação da PR</th><th>Nº RC</th><th>Aprovação da RC</th><th>Projeto</th><th class="r">Dias com o gerente</th></tr></thead><tbody>
       ${pg.items.map(({r,p,d})=>{ const k=farolGer(d); return `<tr class="click" data-act="open" data-id="${esc(r.id)}"><td class="num">${esc(fmtNum(r.id))}</td><td class="num">${esc(p.pr)}</td><td class="num">${fmtD(p.data)}</td><td class="num">${esc(p.rc||"—")}</td><td class="num">${fmtD(p.aprov)}</td><td>${esc(projOf(r))}</td><td class="r"><span class="farol f-${k}"><i></i>${d} d</span></td></tr>`; }).join("")}</tbody></table></div>${pg.html}<p class="sub" style="margin:8px 0 0">Dias úteis entre a criação da PR (Suprimentos) e a aprovação da RC pelo gerente (Diligenciamento). Farol: verde até 5 dias · amarelo 6 e 7 dias · vermelho acima de 7 dias.</p>`:empty("Nenhuma RC aprovada no período. Informe a RC no Diligenciamento."));
   })()}
+  ${panel("Pedidos entregues com restrição",(()=>{ const ab=S.rms.filter(r=>passaFiltro(r)&&restrOf(r)); return `${ab.length} retido(s) no almoxarifado agora`; })(),restrPanel())}
   ${panel("Pedidos emitidos e entregues por trimestre",`${tot} pedido(s) · ${ent.length} entregue(s)`,lineTrim(c))}
   ${panel("Lead time por tipo de compra e projeto","quadro dinâmico · PR → entrega do pedido",ltQuadro(L))}
   ${panel("Indicadores por projeto","PRs bloqueadas, aprovação de PR e pedidos por tipo de compra",projTable)}
@@ -2926,7 +2976,7 @@ document.addEventListener("click",async ev=>{
   else if(a==="dilsave"){
     const id=t.dataset.id, g=k=>$("#"+k+"-"+CSS.escape(id)), r=S.rms.find(x=>x.id===id), its=r.itens||[], old=dItens(r);
     const bad=(el,msg)=>{ el?.classList.add("err"); el?.focus(); toast(msg); };
-    const v={obs:g("ob").value.trim()}, prsA=prsOf(r), prsN=[], rcEv=[];
+    const v={obs:g("ob").value.trim(), rs:(g("rs")?.value||""), rso:(g("rso")?.value||"").trim()}, prsA=prsOf(r), prsN=[], rcEv=[];
     for(let q=0;q<prsA.length;q++){ const p=prsA[q], gq=k=>$("#"+k+"-"+CSS.escape(id)+"-"+q), rcn=(gq("rcn")?.value||"").trim(), ap=gq("dap")?.value||"";
       if(rcn && !ap) return bad(gq("dap"),`PR ${p.pr}: informe a data de aprovação da RC.`);
       if(ap && !rcn) return bad(gq("rcn"),`PR ${p.pr}: informe o nº da RC liberada pelo gerente.`);
@@ -2969,7 +3019,15 @@ document.addEventListener("click",async ev=>{
         novasN.push({id:`${id}-${pd}-${Date.now()}`, em:new Date().toISOString(), tipo:k, titulo:k==="entregue"?`Pedido ${pd} entregue`:`Pedido ${pd} entregue parcialmente`, texto:(k==="parcial"?`Entregue ${nfmt(o.ent)} de ${nfmt(o.qtd)} · pendente ${nfmt(o.qtd-o.ent)}\n`:`Entrega total: ${nfmt(o.qtd)} unidade(s)\n`)+lista}); } });
     if(novasN.length){ stPatch.notificacoes=[...(cur.notificacoes||[]), ...novasN]; ev.push("Solicitante notificado: "+novasN.map(n=>n.titulo).join("; ")); }
     const dPatch={prBloqueada:prsN.some(p=>!p.aprov), obs:v.obs, itens, dataPedido:null, fornecedor:null, dataRemessa:null, nf:null, qtdTotal:null, qtdEntregue:null, dataEntrega:null, entregue:null};
-    const dChanged = v.obs!==(dg.obs||"") || JSON.stringify(itens)!==JSON.stringify(old.map(o=>({pedido:o.pedido||"",dataPedido:o.dataPedido||"",fornecedor:o.fornecedor||"",dataRemessa:o.dataRemessa||"",nf:o.nf||"",qtdEntregue:itemEnt(o),dataEntrega:o.dataEntrega||"",obs:o.obs||""})));
+    // entrega com restrição (nota 083)
+    const rOld=(dg.restricao&&RESTR[dg.restricao.tipo])?dg.restricao:null, hoje=today(), quem=S.auth?.user?.nome||"Suprimentos";
+    if(v.rs && !itens.some(x=>(+x.qtdEntregue||0)>0)) return bad(g("rs"),"Restrição só vale para pedido entregue: informe a quantidade entregue antes.");
+    if(v.rs && !v.rso) return bad(g("rso"),"Informe o motivo da restrição.");
+    let rChanged=false;
+    if(v.rs && !rOld){ dPatch.restricao={tipo:v.rs, desde:hoje, obs:v.rso, por:quem}; rChanged=true; }
+    else if(v.rs && rOld && (v.rs!==rOld.tipo||v.rso!==(rOld.obs||""))){ dPatch.restricao={...rOld, tipo:v.rs, obs:v.rso}; rChanged=true; }
+    else if(!v.rs && rOld){ dPatch.restricao=null; dPatch.restricoes=[...restrHist(r), {...rOld, ate:hoje, liberadoPor:quem}]; rChanged=true; }
+    const dChanged = rChanged || v.obs!==(dg.obs||"") || JSON.stringify(itens)!==JSON.stringify(old.map(o=>({pedido:o.pedido||"",dataPedido:o.dataPedido||"",fornecedor:o.fornecedor||"",dataRemessa:o.dataRemessa||"",nf:o.nf||"",qtdEntregue:itemEnt(o),dataEntrega:o.dataEntrega||"",obs:o.obs||""})));
     if(!ev.length && !dChanged){ S.dilEdit=null; S.dilKeep=null; toast(`RMS ${fmtNum(id)}: nada mudou.`); render(); window.scrollTo(0,0); return; }
     t.disabled=true;
     try{
