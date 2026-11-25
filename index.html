@@ -543,6 +543,8 @@ body.so-ver [data-act="getanx"],body.so-ver [data-act="editrms"],body.so-ver [da
 .restrbox legend{font-weight:700;font-size:12.5px;padding:0 6px;color:#92400e} .restrbox .span3{grid-column:span 3} .restrbox .full{grid-column:1/-1}
 @media (max-width:760px){.restrbox .rgrid{grid-template-columns:1fr}.restrbox .span3{grid-column:auto}}
 .rbar{display:inline-block;vertical-align:middle;width:110px;height:8px;border-radius:4px;background:var(--surface-2,#eef2f6);overflow:hidden}.rbar span{display:block;height:100%;background:#f59e0b}
+.pushst{padding:10px 12px;border-radius:9px;font-size:13px;background:#f1f5f9;color:#334155}.pushst.ativo{background:#f1f8e0;color:#4F7A00;font-weight:600}.pushst.negado,.pushst.sem{background:#fef3c7;color:#92400e}
+@media (max-width:760px){.lb2{display:none}}
 </style>
 
 <div class="top">
@@ -555,7 +557,7 @@ body.so-ver [data-act="getanx"],body.so-ver [data-act="editrms"],body.so-ver [da
     <span class="tag">USO INTERNO</span>
     <span id="bellBox" hidden><button class="bell" data-act="bell" aria-label="Notificações de novas RMS"><span aria-hidden="true">🔔</span><span id="bellN" class="bellN"></span></button></span>
     <button type="button" class="btn small primary" id="btnInstalar" hidden>Instalar app</button>
-    <span id="userBox" class="userbox" hidden><span class="tag">👤 <span id="userName"></span></span><button class="btn small" data-act="lgsair">Sair</button></span>
+    <span id="userBox" class="userbox" hidden><span class="tag">👤 <span id="userName"></span></span><button class="btn small" data-act="pushpainel" id="btnAvisos" title="Avisos no celular" aria-label="Avisos no celular">🔔<span class="lb2"> Avisos</span></button><button class="btn small" data-act="lgsair">Sair</button></span>
   </div>
 </div>
 
@@ -584,10 +586,7 @@ body.so-ver [data-act="getanx"],body.so-ver [data-act="editrms"],body.so-ver [da
 <div id="notifRoot"></div>
 <div id="toastRoot"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 "use strict";
 const STATUS = {
@@ -771,7 +770,11 @@ async function claimAndSave(body){
     const {data,error}=await comSessao(S.sb,()=>S.sb.rpc("rms_criar",{ano:String(year), dados:JSON.parse(JSON.stringify(body))}));
     if(!error && data){ const id=String(data); if(!S.rms.some(r=>r.id===id)) S.rms.push({...body, numero:id, id}); S.proxNum=null; return id; }
     if(error && (error.code==="42501"||/permiss/i.test(String(error.message||"")))) throw supaErr(error);
-    // função nova indisponível (SQL ainda não rodado ou falha): nada foi gravado, segue o modo anterior
+    // sem conexão / resposta perdida: a RMS pode ter sido gravada. NÃO cria outra por outro caminho (nota 085);
+    // a pessoa clica em Enviar de novo e o código de envio evita a duplicidade.
+    if(error && !/PGRST202|could not find the function|rms_criar/i.test(String(error.code||"")+" "+String(error.message||""))){
+      const e=new Error("Sem conexão com o servidor. Confira a internet e clique em Enviar de novo: o portal não duplica a RMS."); e.code="rede"; throw e; }
+    // função nova ainda não instalada no banco (SQL não rodado): segue o modo anterior
     try{ const {data,error}=await S.sb.rpc("rms_proximo_numero",{ano:String(year)}); if(!error && +data>0) n=Math.max(n,+data); }catch{}
   }
   const holder=(S.uid||"anon")+"-"+Math.random().toString(36).slice(2,8);
@@ -811,9 +814,12 @@ function route(){
 }
 window.addEventListener("hashchange",()=>{ if(location.hash!=="#minhas") S.lastSent=null; if(!S.pendingOpen) S.justSent=null; S.openId=S.pendingOpen||null; S.pendingOpen=null; route(); render(); window.scrollTo(0,0); });
 
+/* Código de envio (nota 085): identifica esta RMS em preenchimento. Se a internet cair depois de gravar
+   e a pessoa clicar em Enviar de novo, o banco reconhece o código e devolve a mesma RMS (não cria outra). */
+const novoEnvioId = () => { try{ return crypto.randomUUID(); }catch{ return Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,12); } };
 function newItem(){ return {qtd:"",un:"UN",codigo:"",descricao:"",dataNec:"",elemento:"",info:""}; }
 function newDraft(){
-  return { tipo:"", prioridade:"normal", elemento:"", dataNec:"", projeto:"", itens:Array.from({length:10},newItem),
+  return { envioId:novoEnvioId(), tipo:"", prioridade:"normal", elemento:"", dataNec:"", projeto:"", itens:Array.from({length:10},newItem),
     solicitante:{nome:"",matricula:""},
     infoComp:"", anexos:[], chk:{estoque:false,espec:false,justif:false} };
 }
@@ -1030,10 +1036,23 @@ async function saveFile(filename, data){
     catch(e){ if(e?.code!=="declined") toast(e?.code==="rate_limited"?"Já existe um download aguardando confirmação.":"Não foi possível baixar o arquivo aqui."); }
     return;
   }
-  if(S.mode!=="local"){ toast("Download indisponível nesta visualização."); return; }
+  if(S.mode!=="local" && !S.supa){ toast("Download indisponível nesta visualização."); return; }   // no site (Supabase) o download é liberado (nota 086)
   const url=URL.createObjectURL(data instanceof Blob?data:new Blob([data])); const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
 }
+/* Bibliotecas de Excel e PDF só são baixadas quando alguém exporta/importa (nota 086: abre mais rápido no celular) */
+const LIBS={xlsx:["https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"],
+  pdf:["https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js","https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"]};
+const _libCarga={};
+function carregarLib(k){
+  if(k==="xlsx"&&window.XLSX) return Promise.resolve(); if(k==="pdf"&&window.jspdf?.jsPDF?.API?.autoTable) return Promise.resolve();
+  if(_libCarga[k]) return _libCarga[k];
+  toast(k==="xlsx"?"Preparando o Excel…":"Preparando o PDF…");
+  _libCarga[k]=LIBS[k].reduce((p,src)=>p.then(()=>new Promise((ok,erro)=>{ const sc=document.createElement("script"); sc.src=src; sc.onload=ok; sc.onerror=()=>erro(new Error("sem conexão")); document.head.appendChild(sc); })),Promise.resolve())
+    .catch(e=>{ delete _libCarga[k]; toast("Não foi possível baixar o gerador de "+(k==="xlsx"?"Excel":"PDF")+". Confira a internet e tente de novo."); throw e; });
+  return _libCarga[k];
+}
 async function exportXlsx(){
+  try{ await carregarLib("xlsx"); }catch{ return; }
   if(!window.XLSX){ toast("O gerador de planilha não carregou. Recarregue a página e tente de novo."); return; }
   const tabName=(DIL_TABS.find(t=>t[0]===S.dilFilter)||["","Todas"])[1];
   const d=v=>v?new Date(v+"T00:00:00"):null;
@@ -1463,6 +1482,7 @@ function viewIndicadores(){
 /* ---------- PDF do resumo de indicadores ---------- */
 const pdfTxt = s => String(s??"").replace(/→/g,"->").replace(/[▲]/g,"+").replace(/[▼]/g,"-").replace(/[✓✔]/g,"").replace(/≤/g,"<=").replace(/[^\x00-\xFF–—‘’“”•…]/g,"");
 async function gerarPdf(){
+  try{ await carregarLib("pdf"); }catch{ return; }
   if(!window.jspdf?.jsPDF){ toast("O gerador de PDF não carregou. Recarregue a página e tente de novo."); return; }
   const L=S.rms.filter(r=>noPeriodo(r)&&passaFiltro(r)), c=indCalc(L);
   const temAnt=(S.indPer||"todos")!=="todos", p=temAnt?indCalc(S.rms.filter(r=>noPeriodo(r,1)&&passaFiltro(r))):null;
@@ -1598,6 +1618,7 @@ function impId(v, dataRms, usados){
   return `${y}-${String(n).padStart(4,"0")}`;
 }
 async function impLer(file){
+  try{ await carregarLib("xlsx"); }catch{ return; }
   if(!window.XLSX){ toast("O leitor de planilha não carregou. Recarregue a página e tente de novo."); return; }
   S.imp={nome:file.name, lendo:true}; render();
   try{
@@ -1670,6 +1691,7 @@ async function impGravar(){
   render();
 }
 async function impModelo(){
+  try{ await carregarLib("xlsx"); }catch{ return; }
   if(!window.XLSX){ toast("O gerador de planilha não carregou. Recarregue a página."); return; }
   const wb=XLSX.utils.book_new();
   const r=XLSX.utils.aoa_to_sheet([["Nº RMS","Data RMS","Tipo","Prioridade","Projeto","Elemento PEP / CC","Solicitante","Matrícula","Data necessidade","Status","RC/PR","Data PR","Aprovação PR","Grupo compras","Comprador","Tipo de compra","PR bloqueada","Encerrada em","Observação / motivo","Informações complementares"],
@@ -2051,7 +2073,8 @@ async function submit(){
   if(S.errors.length){ render(); $(".errors")?.scrollIntoView({behavior:"smooth",block:"center"}); return; }
   S.saving=true; render();
   const now=new Date().toISOString();
-  const body={ tipo:d.tipo, projeto:d.projeto, dataNec:d.dataNec, prioridade:d.prioridade, elemento:d.elemento, dataRms:today(), criadoEm:now, criadoPor:S.uid||null, almox:ALMOX_TIPOS.includes(d.tipo),
+  if(!d.envioId) d.envioId=novoEnvioId();
+  const body={ envioId:d.envioId, tipo:d.tipo, projeto:d.projeto, dataNec:d.dataNec, prioridade:d.prioridade, elemento:d.elemento, dataRms:today(), criadoEm:now, criadoPor:S.uid||null, almox:ALMOX_TIPOS.includes(d.tipo),
     itens:d.itens.filter(isFilled).map(it=>({...it,qtd:parseFloat(it.qtd)})), solicitante:d.solicitante, infoComp:d.infoComp, anexos:d.anexos, revForm:"Rev.02" };
   try{
     const id=await claimAndSave(body);
@@ -2607,7 +2630,13 @@ function almoxUpd(id){ const E=CSS.escape(id), el=$("#afs-"+E); if(!el) return; 
   const fim=dec<n?`faltam decidir <strong>${n-dec}</strong> de ${n}`:(p+c===0?`ao concluir: <strong>Atendida pelo estoque</strong> (RMS encerrada)`:`ao concluir: <strong>${p+c}</strong> item(ns) seguem para Suprimentos`);
   el.innerHTML=`<strong>${e}</strong> do estoque · <strong>${p}</strong> parcial · <strong>${c}</strong> p/ compra → ${fim}`; }
 const motivoErro = e => { const d=String(e?.detalhe||e?.message||e||"").trim(); return jwtVenceu(e)?"sua sessão expirou. Clique em Sair e entre de novo.":(d?d.slice(0,160):"sem detalhe"); };
+/* Conferência já feita por outra pessoa do Almoxarifado? (nota 085: evita conferir a mesma RMS duas vezes) */
+function almJaConferida(id){ if(stOf(id)==="almox") return false;
+  const h=[...((S.status[id]||{}).historico||[])].reverse().find(x=>/Almoxarifado|Devolvida/.test(x.evento||""));
+  toast(`RMS ${fmtNum(id)} já foi conferida${h?.por?` por ${h.por}`:" por outra pessoa do Almoxarifado"}. A tela foi atualizada.`); S.openId=null; render(); return true; }
+const almMsgNegado = id => `Não foi possível gravar: a RMS ${fmtNum(id)} já foi conferida por outra pessoa do Almoxarifado (ou o seu perfil não tem permissão).`;
 async function almoxConcluir(id, t){
+  if(almJaConferida(id)) return;
   const r=S.rms.find(x=>x.id===id), E=CSS.escape(id), L=almoxLer(id); let erro="";
   L.forEach((x,i)=>{ const g=document.querySelector(`[aria-label="Decisão do item ${i+1}"]`); g?.classList.toggle("err",!x.dec); if(!x.dec) erro=erro||`Falta decidir o item ${i+1}: clique em Estoque, Compra ou Parcial antes de concluir.`;
     else if(x.dec==="parcial" && !(x.qe>0 && x.qe<x.q)){ erro=erro||`Item ${i+1}: no parcial, informe de 1 até ${x.q} menos 1.`; $(`#aq-${E}-${i}`)?.classList.add("err"); } });
@@ -2623,18 +2652,19 @@ async function almoxConcluir(id, t){
   const ev=`Almoxarifado: ${tudo?"atendida pelo estoque":"conferida"} · ${texto}`;
   t.disabled=true; t.textContent="Salvando…";
   try{ await saveStatus(id, patch, ev); }
-  catch(e){ console.error("almoxConcluir",e); t.disabled=false; t.textContent="Concluir conferência"; toast(e?.code==="permission_denied"?"Sem permissão para gravar esta conferência. Confira o perfil do usuário em Configurações.":`Não foi possível salvar a conferência: ${motivoErro(e)}`); return; }
+  catch(e){ console.error("almoxConcluir",e); t.disabled=false; t.textContent="Concluir conferência"; toast(e?.code==="permission_denied"?almMsgNegado(id):`Não foi possível salvar a conferência: ${motivoErro(e)}`); return; }
   toast(tudo?`RMS ${fmtNum(id)} atendida pelo estoque. Solicitante avisado.`:`RMS ${fmtNum(id)}: ${comp.length} item(ns) liberado(s) para Suprimentos.`);
   try{ S.openId=null; if(S.view!=="almox") location.hash="#almox"; else render(); window.scrollTo(0,0); }catch(e){ console.error("render após conferência",e); location.reload(); }
 }
 async function almoxDevolver(id, t){
+  if(almJaConferida(id)) return;
   const E=CSS.escape(id), m=$("#am-"+E), msg=(m?.value||"").trim();
   if(msg.length<10){ m?.classList.add("err"); m?.focus(); toast("Escreva o que o solicitante precisa ajustar (mínimo 10 caracteres)."); return; }
   const em=new Date().toISOString(), cur=S.status[id]||{};
   t.disabled=true;
   try{ await saveStatus(id,{status:"revisao", revisao:{msg, em, origem:"almox"}, notificacoes:[...(cur.notificacoes||[]), {id:`${id}-rv-${Date.now()}`, em, tipo:"revisao", titulo:"RMS devolvida pelo Almoxarifado", texto:msg}]}, `Devolvida pelo Almoxarifado: "${msg}"`);
     toast(`RMS ${fmtNum(id)} devolvida ao solicitante.`); S.openId=null; render(); }
-  catch(e){ t.disabled=false; toast(e?.code==="permission_denied"?"Sem permissão para gravar. O usuário do Almoxarifado precisa de acesso de Editor ao portal.":`Falha ao salvar: ${motivoErro(e)}`); }
+  catch(e){ t.disabled=false; toast(e?.code==="permission_denied"?almMsgNegado(id):`Falha ao salvar: ${motivoErro(e)}`); }
 }
 function almoxInfo(r){ const a=(S.status[r.id]||{}).almox; if(!a?.itens) return "";
   const est=a.itens.map((x,i)=>x.qe>0?`<li>Item ${i+1} · ${esc((r.itens[i]||{}).descricao||"")}: <strong>${String(x.qe).replace(".",",")} ${esc((r.itens[i]||{}).un||"")}</strong> do estoque${x.qc>0?` · ${String(x.qc).replace(".",",")} para compra`:""}</li>`:"").join("");
@@ -2750,8 +2780,8 @@ function tfUpdate(id){
   f.querySelectorAll("[data-act=tstep]").forEach(b=>{ const j=ord.indexOf(b.dataset.k); b.className=ix<0?"":j<ix?"done":j===ix?"cur":""; b.setAttribute("aria-pressed",j===ix); });
   f.querySelectorAll("[data-act=tacao]").forEach(b=>{ if(b.dataset.k) b.setAttribute("aria-pressed", b.dataset.k===v); });
   const muda=st!==cur;
-  $("#tfs-"+E).innerHTML=`${n?`<strong>${k} de ${n}</strong> ${n===1?"item comprado":"itens comprados"} · `:""}${muda?`ao salvar: <strong>${STATUS[st].label}</strong>`:`status: <strong>${STATUS[st].label}</strong>`}`;
-  const pa=$("#tfa-"+E), ac=TR_ACAO[v];
+  const tfs=$("#tfs-"+E); if(tfs) tfs.innerHTML=`${n?`<strong>${k} de ${n}</strong> ${n===1?"item comprado":"itens comprados"} · `:""}${muda?`ao salvar: <strong>${STATUS[st].label}</strong>`:`status: <strong>${STATUS[st].label}</strong>`}`;
+  const pa=$("#tfa-"+E), ac=TR_ACAO[v]; if(!pa) return;   // tela redesenhada no meio da atualização (nota 086)
   pa.hidden=!ac; if(ac){ $("#tfl-"+E).innerHTML=`${ac[0]} <span class="req">*</span>`; const ta=$("#ms-"+E); ta.placeholder=ac[1];
     if(!ta.dataset.k||ta.dataset.k!==v){ const sx=S.status[id]||{}; ta.value=v==="revisao"&&cur==="revisao"?(sx.revisao?.msg||""):v===cur?(sx.motivo||""):""; ta.dataset.k=v; } }
   f.classList.toggle("alert", ["cancelado","recusado","revisao"].includes(v));
@@ -2952,7 +2982,7 @@ function renderDrawer(){
 /* ---------- Perfil Consulta: só visualização (nota 082) ----------
    Ações liberadas: navegar, filtrar, ordenar, abrir/fechar, copiar, exportar. Todo o resto é barrado aqui
    (e também no banco, pela regra do Supabase). */
-const CONSULTA_OK=new Set(["open","close","okclose","dilclose","almtab","bell","clear","colall","colclose","colf","colnone","colx","colxall","copy","dilf","dsort","filter","indclear","indgo","indpdf","indper","ini","iniopen","kfilter","lgsair","lgver","ltinv","ltmed","ltsel","minf","notifok","notifver","pg","snall","snok","snopen","supf","xlsx"]);
+const CONSULTA_OK=new Set(["pushpainel","pushfechar","pushativ","pushdesl","pushteste","open","close","okclose","dilclose","almtab","bell","clear","colall","colclose","colf","colnone","colx","colxall","copy","dilf","dsort","filter","indclear","indgo","indpdf","indper","ini","iniopen","kfilter","lgsair","lgver","ltinv","ltmed","ltsel","minf","notifok","notifver","pg","snall","snok","snopen","supf","xlsx"]);
 document.addEventListener("click",ev=>{
   if(!S.consulta) return; const t=ev.target.closest("[data-act]"); if(!t) return;
   if(CONSULTA_OK.has(t.dataset.act)) return;
@@ -3315,6 +3345,64 @@ function lgFlowAnim(){ clearInterval(S._lgFlow); const L=[...document.querySelec
   if(matchMedia("(prefers-reduced-motion: reduce)").matches){ L.forEach(li=>li.classList.add("on")); return; }
   let i=0; const tick=()=>{ if(!document.body.contains(L[0])){ clearInterval(S._lgFlow); return; } L.forEach((li,j)=>li.classList.toggle("on",j<=i)); i=(i+1)%(L.length+1); }; tick(); S._lgFlow=setInterval(tick,1300); }
 /* App instalável (nota 075): service worker no site publicado + botão "Instalar app" */
+
+/* ---------- Avisos no celular (push) — nota 087 ---------- */
+const VAPID_PUBLICA="BMAURYM2sZhvBa5lOKjbEUCYA5QhBxbEUdLL7CsuVaRN3niRfrFCnC28lVSkbdzGYpsgaPMhMFOz6vqQa2F0Fmw";  // chave pública (a privada fica só no Supabase)
+const pushSuportado = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const ehIphone = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
+const appInstalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone===true;
+const b64uParaBytes = b => { const p="=".repeat((4-b.length%4)%4), r=atob((b+p).replace(/-/g,"+").replace(/_/g,"/")); return Uint8Array.from(r,c=>c.charCodeAt(0)); };
+async function idAparelho(endpoint){ const h=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(endpoint)); return [...new Uint8Array(h)].slice(0,16).map(x=>x.toString(16).padStart(2,"0")).join(""); }
+async function pushEstado(){
+  if(!pushSuportado()) return {k:"sem", txt: ehIphone()&&!appInstalado() ? "No iPhone, primeiro instale o app: Compartilhar → Adicionar à Tela de Início. Depois abra pelo ícone e ative aqui." : "Este navegador não recebe avisos. Use o Chrome (Android/computador) ou o app instalado no iPhone."};
+  if(Notification.permission==="denied") return {k:"negado", txt:"Os avisos foram bloqueados neste aparelho. Libere em Configurações do navegador → Notificações → Portal RMS."};
+  const reg=await navigator.serviceWorker.getRegistration(); const sub=reg && await reg.pushManager.getSubscription();
+  return sub ? {k:"ativo", sub, txt:"Avisos ativos neste aparelho."} : {k:"inativo", txt:"Avisos desligados neste aparelho."};
+}
+async function pushAtivar(){
+  if(!S.supa||!S.uid){ toast("Entre no portal para ativar os avisos."); return; }
+  const est=await pushEstado(); if(est.k==="sem"||est.k==="negado"){ toast(est.txt); return renderPush(); }
+  const perm=await Notification.requestPermission(); if(perm!=="granted"){ toast("Sem permissão para avisos. Você pode liberar depois nas configurações do navegador."); return renderPush(); }
+  const reg=await navigator.serviceWorker.register("sw.js"); await navigator.serviceWorker.ready;
+  let sub=await reg.pushManager.getSubscription(); if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:b64uParaBytes(VAPID_PUBLICA)});
+  const j=sub.toJSON(), id=await idAparelho(j.endpoint);
+  await S.db.doc("push/"+id).set({uid:S.uid, email:S.auth?.user?.email||"", endpoint:j.endpoint, keys:j.keys, aparelho:navigator.userAgent.slice(0,140), em:new Date().toISOString()});
+  try{ localStorage.setItem("rms-push-ok","1"); }catch{}
+  toast("Avisos ativados neste aparelho."); renderPush(); pushTeste(true);
+}
+async function pushDesativar(){
+  const est=await pushEstado(); if(est.sub){ const id=await idAparelho(est.sub.endpoint); try{ await S.db.doc("push/"+id).delete(); }catch{} await est.sub.unsubscribe(); }
+  try{ localStorage.removeItem("rms-push-ok"); }catch{} toast("Avisos desligados neste aparelho."); renderPush();
+}
+async function pushTeste(silencioso){
+  try{ const {data:{session}}=await S.sb.auth.getSession();
+    const r=await fetch(RMS_SUPABASE.url+"/functions/v1/rms-push",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(session?.access_token||""),"apikey":RMS_SUPABASE.key},body:JSON.stringify({teste:true})});
+    const j=await r.json().catch(()=>({})); if(!silencioso) toast(r.ok&&j.enviados?"Aviso de teste enviado. Ele chega em alguns segundos.":"O servidor de avisos ainda não está configurado no Supabase (nota 087).");
+  }catch{ if(!silencioso) toast("Sem conexão com o servidor de avisos."); }
+}
+async function renderPush(){
+  let root=$("#pushRoot"); if(!root){ root=document.createElement("div"); root.id="pushRoot"; document.body.appendChild(root); }
+  if(!S.pushAberto){ root.innerHTML=""; return; }
+  const est=await pushEstado(), P=S.isAdmin?"administrador":S.consulta?"consulta":S.canSup?"suprimentos":S.canAlmox?"almoxarifado":"solicitante";
+  const lista={solicitante:["RMS devolvida para ajuste","PR criada · pedido emitido","Material entregue · atendida pelo estoque","RMS cancelada ou recusada"],
+    almoxarifado:["Nova RMS para conferir (emergencial em destaque)"], suprimentos:["Nova RMS em análise · liberada pelo Almoxarifado","RMS emergencial","PRs bloqueadas há mais de 5 dias (todo dia útil às 8h)"],
+    administrador:["Tudo de Suprimentos","RMS emergencial","Entrega com restrição registrada","PRs no farol vermelho (todo dia útil às 8h)"], consulta:["(o perfil Consulta não recebe avisos)"]}[P];
+  root.innerHTML=`<div class="overlay center" data-act="pushfechar"><div class="notif" role="dialog" aria-modal="true" aria-labelledby="pushTit" style="max-width:460px">
+    <header><h3 id="pushTit">🔔 Avisos no celular</h3></header>
+    <div style="padding:14px 18px;display:grid;gap:12px">
+      <div class="pushst ${est.k}">${esc(est.txt)}</div>
+      <div><strong style="font-size:13px">Você vai receber:</strong><ul style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--muted)">${lista.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${est.k==="ativo"?`<button class="btn primary" data-act="pushteste">Enviar aviso de teste</button><button class="btn" data-act="pushdesl">Desligar neste aparelho</button>`:est.k==="inativo"?`<button class="btn primary" data-act="pushativ">Ativar avisos neste aparelho</button>`:""}
+        <button class="btn" data-act="pushfechar">Fechar</button></div>
+      <p class="sub" style="margin:0">Cada aparelho é ativado separadamente (celular, computador). Os avisos chegam mesmo com o app fechado.</p></div></div></div>`;
+}
+document.addEventListener("click",async ev=>{ const t=ev.target.closest("[data-act]"); if(!t) return; const a=t.dataset.act;
+  if(a==="pushpainel"){ S.pushAberto=true; renderPush(); }
+  else if(a==="pushfechar"){ if(t.classList.contains("overlay")&&ev.target!==t) return; S.pushAberto=false; renderPush(); }
+  else if(a==="pushativ"){ t.disabled=true; try{ await pushAtivar(); }catch(e){ console.error(e); toast(/permission|denied|NotAllowed/i.test(String(e?.message||e))?"O navegador não permitiu receber avisos. Libere as notificações do Portal RMS nas configurações do navegador e tente de novo.":/network|push service|AbortError/i.test(String(e?.message||e))?"Sem conexão com o serviço de avisos do celular. Confira a internet e tente de novo.":"Não foi possível ativar os avisos: "+(e?.message||e)); renderPush(); } }
+  else if(a==="pushdesl"){ await pushDesativar(); }
+  else if(a==="pushteste"){ await pushTeste(false); } });
 if("serviceWorker" in navigator && (location.protocol==="https:"||["localhost","127.0.0.1"].includes(location.hostname))) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(e=>console.warn("sw",e)));
 let pedidoInstalar=null;
 window.addEventListener("beforeinstallprompt",ev=>{ ev.preventDefault(); pedidoInstalar=ev; const b=document.getElementById("btnInstalar"); if(b) b.hidden=false; });
