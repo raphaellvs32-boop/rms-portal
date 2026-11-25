@@ -531,6 +531,10 @@ label.f.r3{gap:10px} label.f.r3>span:first-child{line-height:16px;min-height:16p
 .r3 .types label{height:42px;box-sizing:border-box;padding-top:0;padding-bottom:0}
 .r3 .types input{margin:0}
 .elemhint{position:absolute;left:0;bottom:0;font-size:12px;line-height:16px;color:var(--muted);font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.elemhint .ok{color:#4F7A00;font-weight:600}.elemhint .no{color:var(--bad);font-weight:600}
+.sovbar{margin:0 0 14px;padding:9px 14px;border-radius:9px;background:#e6f6f9;color:#0E7490;font-size:13px;border:1px solid #b6e3ec}
+body.so-ver [data-act="getanx"],body.so-ver [data-act="editrms"],body.so-ver [data-act="diledit"],body.so-ver [data-act="buy"],body.so-ver [data-act="bulkapply"],body.so-ver [data-act="bulkfull"],body.so-ver [data-act="tacao"],body.so-ver [data-act="adec"],body.so-ver [data-act="aconcluir"],body.so-ver [data-act="fwd"],body.so-ver [data-act="avisar"],body.so-ver [data-act="impfile"],body.so-ver [data-act="impgo"]{display:none!important}
+.usrres{font-size:12px;color:var(--muted);font-weight:400;line-height:1.4}
+.btn.danger{color:var(--bad);border-color:currentColor}
 </style>
 
 <div class="top">
@@ -551,8 +555,8 @@ label.f.r3{gap:10px} label.f.r3>span:first-child{line-height:16px;min-height:16p
   <nav class="side" aria-label="Menu">
     <a href="#painel" data-v="painel" id="navIni" hidden><span class="ic">⌂</span><span class="lb">Início</span><span class="ls">Início</span></a>
     <h3 class="ng" id="ngSol">Solicitar</h3>
-    <a href="#nova" data-v="nova"><span class="ic">+</span><span class="lb">Nova RMS</span><span class="ls">Nova</span></a>
-    <a href="#minhas" data-v="minhas"><span class="ic">☷</span><span class="lb">Minhas RMS</span><span class="ls">Minhas</span></a>
+    <a href="#nova" data-v="nova" id="navNova"><span class="ic">+</span><span class="lb">Nova RMS</span><span class="ls">Nova</span></a>
+    <a href="#minhas" data-v="minhas" id="navMinhas"><span class="ic">☷</span><span class="lb">Minhas RMS</span><span class="ls">Minhas</span></a>
     <h3 class="ng" id="ngAlm" hidden>Almoxarifado</h3>
     <a href="#almox" data-v="almox" id="navAlm" hidden><span class="ic">▦</span><span class="lb">Conferência de estoque</span><span class="ls">Conferir</span><span class="badge" id="almBadge" hidden></span></a>
     <h3 class="ng" id="ngSup">Suprimentos</h3>
@@ -705,7 +709,7 @@ function setConn(){
   const dot=$("#connDot"), lbl=$("#connLbl");
   if(S.mode==="db"){ dot.className="dot on"; lbl.lastChild.textContent=S.supa?"Base compartilhada (nuvem)":"Base compartilhada"; }
   else if(S.mode==="local"){ dot.className="dot off"; lbl.lastChild.textContent="Modo local (este navegador)"; }
-  $("#navIni").hidden = !(S.canSup||S.canAlmox); $("#navAlm").hidden = !(S.canSup||S.canAlmox); $("#ngAlm").hidden = $("#navAlm").hidden; $("#ngSup").hidden = !(S.canSup||S.canAlmox); $("#ngAdm").hidden = !S.isAdmin; $("#navTod").hidden = !S.canSup; $("#navSup").hidden = !S.canSup; $("#navCfg").hidden = !S.isAdmin; $("#navGes").hidden = !S.isAdmin; $("#navDil").hidden = !S.canSup; $("#navInd").hidden = !(S.canSup||S.canAlmox);
+  const vt=S.canSup||S.consulta; $("#navIni").hidden = !(vt||S.canAlmox); $("#navAlm").hidden = !(vt||S.canAlmox); $("#ngAlm").hidden = $("#navAlm").hidden; $("#ngSup").hidden = !(vt||S.canAlmox); $("#ngAdm").hidden = !S.isAdmin; $("#navTod").hidden = !vt; $("#navSup").hidden = !vt; $("#navCfg").hidden = !S.isAdmin; $("#navGes").hidden = !S.isAdmin; $("#navDil").hidden = !vt; $("#navInd").hidden = !(vt||S.canAlmox); $("#navNova").hidden = !!S.consulta; $("#navMinhas").hidden = !!S.consulta; $("#ngSol").hidden = !!S.consulta; document.body.classList.toggle("so-ver", !!S.consulta);
 }
 
 async function boot(){
@@ -808,22 +812,24 @@ function newDraft(){
 
 /* ---------- Render ---------- */
 function render(){
+  if(S.consulta && ["nova","editar","minhas"].includes(S.view)){ S.view="painel"; if(location.hash!=="#painel") history.replaceState(null,"","#painel"); }  // Consulta não emite RMS
   if((S.view==="nova"||S.view==="editar") && $("#frm") && S.draft) readForm();
-  const vw = S.view==="painel" && !(S.canSup||S.canAlmox) ? "minhas" : S.view;
+  const vw = S.view==="painel" && !(S.canSup||S.canAlmox||S.consulta) ? "minhas" : S.view;
   document.querySelectorAll(".side a").forEach(a=>{ if(a.dataset.v===vw) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
   const m=$("#main");
   { const n=S.rms.filter(r=>stOf(r.id)==="analise"||emergAlmox(r)).length, b=$("#supBadge"); if(b){ b.hidden=!n; b.textContent=n; b.title=n+" RMS em análise"; } }
   { const n=S.rms.filter(r=>stOf(r.id)==="almox").length, b=$("#almBadge"); if(b){ b.hidden=!n; b.textContent=n; b.title=n+" RMS aguardando o Almoxarifado"; } }
   if(S.view==="nova"||S.view==="editar") m.innerHTML=viewNova();
   else if(vw==="minhas") m.innerHTML=viewMinhas();
-  else if(S.view==="suprimentos") m.innerHTML=S.canSup?viewSup():viewPainel();
-  else if(S.view==="almox") m.innerHTML=(S.canSup||S.canAlmox)?viewAlmox():viewPainel();
-  else if(S.view==="todas") m.innerHTML=S.canSup?viewLista(false):viewPainel();
+  else if(S.view==="suprimentos") m.innerHTML=(S.canSup||S.consulta)?viewSup():viewPainel();
+  else if(S.view==="almox") m.innerHTML=(S.canSup||S.canAlmox||S.consulta)?viewAlmox():viewPainel();
+  else if(S.view==="todas") m.innerHTML=(S.canSup||S.consulta)?viewLista(false):viewPainel();
   else if(S.view==="config") m.innerHTML=S.isAdmin?viewConfig():viewPainel();
   else if(S.view==="gestor") m.innerHTML=S.isAdmin?(S.gestorOk?viewGestor():viewGestorSenha()):viewPainel();
-  else if(S.view==="dilig") m.innerHTML=S.canSup?viewDilig():viewPainel();
-  else if(S.view==="indicadores") m.innerHTML=(S.canSup||S.canAlmox)?viewIndicadores():viewPainel();
+  else if(S.view==="dilig") m.innerHTML=(S.canSup||S.consulta)?viewDilig():viewPainel();
+  else if(S.view==="indicadores") m.innerHTML=(S.canSup||S.canAlmox||S.consulta)?viewIndicadores():viewPainel();
   else m.innerHTML=viewPainel();
+  if(S.consulta) m.insertAdjacentHTML("afterbegin",`<div class="sovbar" role="note">👁 Perfil <strong>Consulta</strong>: somente visualização. Você pode filtrar, abrir RMS e exportar Excel/PDF.</div>`);
   m.insertAdjacentHTML("beforeend",`<footer class="foot">Requisição de Materiais e Serviços · baseado no Formulário de RMS 2026 Rev.02 · Classificação: Uso Interno</footer>`);
   renderDrawer();
   renderNotif(); renderSupNotif(); renderAlmNotif(); renderColPop();
@@ -2878,6 +2884,18 @@ function renderDrawer(){
   if(almEd) almoxUpd(r.id);
 }
 
+/* ---------- Perfil Consulta: só visualização (nota 082) ----------
+   Ações liberadas: navegar, filtrar, ordenar, abrir/fechar, copiar, exportar. Todo o resto é barrado aqui
+   (e também no banco, pela regra do Supabase). */
+const CONSULTA_OK=new Set(["open","close","okclose","dilclose","almtab","bell","clear","colall","colclose","colf","colnone","colx","colxall","copy","dilf","dsort","filter","indclear","indgo","indpdf","indper","ini","iniopen","kfilter","lgsair","lgver","ltinv","ltmed","ltsel","minf","notifok","notifver","pg","snall","snok","snopen","supf","xlsx"]);
+document.addEventListener("click",ev=>{
+  if(!S.consulta) return; const t=ev.target.closest("[data-act]"); if(!t) return;
+  if(CONSULTA_OK.has(t.dataset.act)) return;
+  ev.preventDefault(); ev.stopImmediatePropagation();
+  toast(t.dataset.act==="getanx"?"Perfil Consulta não baixa anexos.":"Perfil Consulta: somente visualização.");
+},true);
+document.addEventListener("submit",ev=>{ if(S.consulta){ ev.preventDefault(); ev.stopImmediatePropagation(); toast("Perfil Consulta: somente visualização."); } },true);
+
 /* ---------- Eventos ---------- */
 document.addEventListener("click",async ev=>{
   const t=ev.target.closest("[data-act]"); if(!t) return;
@@ -3069,7 +3087,17 @@ function vivaLer(){ try{ if(document.cookie.split(";").some(c=>c.trim()==="rms_v
 function vivaGravar(){ try{ document.cookie="rms_viva=1; path=/; SameSite=Lax"+(location.protocol==="https:"?"; Secure":""); }catch{} try{ sessionStorage.setItem("rms-sessao-viva","1"); }catch{} }
 const memLer = () => { try{ return JSON.parse(localStorage.getItem(MEM_KEY)||"null"); }catch{ return null; } };
 const memGravar = v => { try{ v ? localStorage.setItem(MEM_KEY,JSON.stringify(v)) : localStorage.removeItem(MEM_KEY); }catch{} };
-const PERFIS={solicitante:"Solicitante", almoxarifado:"Almoxarifado", suprimentos:"Suprimentos"};
+const PERFIS={solicitante:"Solicitante", almoxarifado:"Almoxarifado", suprimentos:"Suprimentos", consulta:"Consulta"};
+/* Perfil como aparece no cadastro: "Administrador" = Suprimentos + marcação admin (nota 082) */
+const PERFIS_UI={administrador:"Administrador", suprimentos:"Suprimentos", almoxarifado:"Almoxarifado", consulta:"Consulta", solicitante:"Solicitante"};
+const PERFIL_RESUMO={
+  administrador:"Tudo liberado: usuários, elementos, compradores, SLA, Painel do Gestor, liberar trava e excluir RMS. Máximo 2 pessoas.",
+  suprimentos:"Fila de compras, criar PR, diligenciamento, conferência de estoque, todas as RMS e indicadores. Não vê Configurações nem Painel do Gestor.",
+  almoxarifado:"Conferência de estoque, locais de retirada, emitir RMS; vê Início e Indicadores sem alterar.",
+  consulta:"Somente visualização: Início, conferência, fila, diligenciamento, todas as RMS e indicadores (exporta Excel/PDF). Não emite, não altera e não baixa anexos.",
+  solicitante:"Emite RMS e acompanha só as próprias."};
+const perfilUI = u => u&&u.perfil==="suprimentos"&&u.admin===true ? "administrador" : (u&&PERFIS[u.perfil] ? u.perfil : "solicitante");
+const qtdAdmins = () => (S.usuarios||[]).filter(x=>x.ativo!==false&&x.perfil==="suprimentos"&&x.admin===true).length;
 S.auth={estado:"carregando", modo:"login", erro:"", tent:0, bloqAte:0, user:null};
 S.usuarios=[]; S.acessos={};
 const ACS_LOCAL="portal-rms-acessos";
@@ -3095,6 +3123,11 @@ async function salvarUsuario(u){
   const {_k,...dados}=u, k=_k||emailKey(u.email);
   if(S.mode==="db") await S.db.doc("usuarios/"+k).set(dados);
   else { const L=(S.usuarios||[]).filter(x=>x._k!==k); L.push({...dados,_k:k}); S.usuarios=L; try{ localStorage.setItem(USR_LOCAL,JSON.stringify(L)); }catch{} }
+}
+async function excluirUsuario(u){
+  const k=u._k||emailKey(u.email);
+  if(S.mode==="db"){ await S.db.doc("usuarios/"+k).delete(); try{ await S.db.doc("acessos/"+k).delete(); }catch{} }
+  S.usuarios=(S.usuarios||[]).filter(x=>x._k!==k); if(S.mode!=="db"){ try{ localStorage.setItem(USR_LOCAL,JSON.stringify(S.usuarios)); }catch{} }
 }
 /* senha pessoal: uma por e-mail, guardada na área privada de quem a criou */
 async function lerSenhaPropria(email){
@@ -3138,16 +3171,18 @@ function entrar(u, silencioso, senhaDefinida){
   if(!silencioso && !S.supa) memGravar(a.mem ? {email:u.email, ate:new Date(Date.now()+MEM_DIAS*864e5).toISOString()} : null); /* no site (Supabase) quem grava é o login — nota 073 */
   S.canSup = !!S.claudeSup && (u.perfil||"solicitante")==="suprimentos";
   S.canAlmox = !!S.claudeSup && (u.perfil||"solicitante")==="almoxarifado";
+  S.consulta = !!S.claudeSup && u.perfil==="consulta";        // somente visualização (nota 082)
+  S.verTudo = S.canSup || S.consulta;
   S.isAdmin = S.canSup && (!S.supa || u.admin===true);
   setConn(); renderLogin();
-  if((!S.isAdmin && ["config","gestor"].includes(S.view)) || (!S.canSup && ["suprimentos","dilig"].includes(S.view)) || (!S.canSup && !S.canAlmox && S.view==="indicadores") || (!S.canSup && !S.canAlmox && S.view==="almox")) location.hash = S.canAlmox ? "#almox" : "#painel"; else render();
+  if((!S.isAdmin && ["config","gestor"].includes(S.view)) || (!S.verTudo && ["suprimentos","dilig","todas"].includes(S.view)) || (!S.verTudo && !S.canAlmox && S.view==="indicadores") || (!S.verTudo && !S.canAlmox && S.view==="almox") || (S.consulta && ["nova","minhas","editar"].includes(S.view))) location.hash = S.canAlmox ? "#almox" : "#painel"; else render();
   if(!silencioso) toast(`Bem-vindo(a), ${u.nome||u.email}!`);
   if(S.canSup && (S.mode==="local"||S.diligOk)) setTimeout(reconciliar,800);
 }
 function renderLogin(){
   const root=$("#loginRoot"); if(!root) return;
   const a=S.auth; document.body.classList.toggle("locked", a.estado!=="ok");
-  const uBox=$("#userBox"); if(uBox){ uBox.hidden=a.estado!=="ok"; if(a.estado==="ok") $("#userName").textContent=`${a.user?.nome||a.user?.email||""} · ${PERFIS[a.user?.perfil]||""}${S.isAdmin?" · Administrador":""}`; }
+  const uBox=$("#userBox"); if(uBox){ uBox.hidden=a.estado!=="ok"; if(a.estado==="ok") $("#userName").textContent=`${a.user?.nome||a.user?.email||""} · ${S.isAdmin?"Administrador":(PERFIS[a.user?.perfil]||"Solicitante")}`; }
   if(a.estado==="ok"){ root.innerHTML=""; return; }
   const brand=`<div class="lg-brand"><div class="logo lg-logo" aria-hidden="true">RMS</div><h1>Requisição de Materiais e Serviços</h1><p>Transforme sua gestão de solicitações</p></div>`;
   const err=a.erro?`<div class="errors" role="alert">${esc(a.erro)}</div>`:"";
@@ -3265,7 +3300,7 @@ document.addEventListener("click", ev=>{
   else if(a==="lgprimeiro"){ S.auth.modo="primeiro"; S.auth.erro=""; S.auth.info=""; renderLogin(); }
   else if(a==="lgvoltar"){ S.auth.modo="login"; S.auth.erro=""; S.auth.info=""; S.auth.pend=null; renderLogin(); }
   else if(a==="lgsair" && S.supa){ (S.minhaTrava?travaRpc("rms_liberar",S.minhaTrava):Promise.resolve()).then(()=>S.sb.auth.signOut()).finally(()=>{ try{ sessionStorage.clear(); }catch{} location.hash="#painel"; location.reload(); }); }
-  else if(a==="lgsair" && !S.supa){ try{ sessionStorage.removeItem(SESS_KEY); }catch{} const m=memLer(); if(m) memGravar({email:m.email, ate:null}); S.auth.estado="pendente"; S.auth.modo="login"; S.auth.erro=""; S.auth.user=null; S.canSup=!!S.claudeSup; S.isAdmin=false; S.canAlmox=false; renderLogin(); }
+  else if(a==="lgsair" && !S.supa){ try{ sessionStorage.removeItem(SESS_KEY); }catch{} const m=memLer(); if(m) memGravar({email:m.email, ate:null}); S.auth.estado="pendente"; S.auth.modo="login"; S.auth.erro=""; S.auth.user=null; S.canSup=!!S.claudeSup; S.isAdmin=false; S.canAlmox=false; S.consulta=false; S.verTudo=S.canSup; renderLogin(); }
 });
 
 /* ---------- Configurações › Usuários do portal (somente Suprimentos) ---------- */
@@ -3280,7 +3315,7 @@ function usuariosPanel(){
       <label class="f"><span>E-mail <span class="req">*</span></span><input class="in" id="usrEmail" type="email" value="${esc(f.email||"")}" placeholder="nome@empresa.com.br" autocomplete="off"></label>
       <label class="f">Matrícula<input class="in num" id="usrMat" value="${esc(f.matricula||"")}" autocomplete="off"></label>
       <label class="f">Setor / área<input class="in" id="usrSetor" value="${esc(f.setor||"")}" placeholder="Ex.: Manutenção Mecânica"></label>
-      <label class="f">Perfil<select class="in" id="usrPerfil">${Object.entries(PERFIS).map(([k,v])=>`<option value="${k}" ${f.perfil===k?"selected":""}>${v}</option>`).join("")}</select></label>
+      <label class="f">Perfil<select class="in" id="usrPerfil">${Object.entries(PERFIS_UI).map(([k,v])=>`<option value="${k}" ${(f.perfil||"solicitante")===k?"selected":""}>${v}</option>`).join("")}</select><span class="usrres" id="usrRes">${esc(PERFIL_RESUMO[f.perfil||"solicitante"])}</span></label>
       <label class="f" style="grid-column:span 2">Solicitado por (supervisor)<input class="in" id="usrSolic" value="${esc(f.solicitadoPor||"")}" placeholder="Nome do supervisor que pediu o cadastro"></label>
       <div style="display:flex;align-items:flex-end"><button type="submit" class="btn primary" style="width:100%">Cadastrar usuário</button></div>
       ${e?`<div class="errors" role="alert" style="grid-column:1/-1">${esc(e)}</div>`:""}
@@ -3290,13 +3325,14 @@ function usuariosPanel(){
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small primary" data-act="copy" data-txt="${esc(`Acesso ao portal Requisição de Materiais e Serviços\nLogin: ${S.usrSenha.email}\nSenha temporária: ${S.usrSenha.senha}\nNo primeiro acesso você vai criar sua senha pessoal.`)}" data-ok="Dados de acesso copiados.">Copiar dados de acesso</button><button class="btn small" data-act="usrok">Fechar</button></div></div>`:""}
     ${!L.length?`<div class="empty">Nenhum usuário cadastrado.</div>`:`<div class="tw" style="margin-top:14px"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Matrícula</th><th>Setor</th><th>Perfil</th><th>Solicitado por</th><th>Último acesso</th><th>Situação</th><th></th></tr></thead><tbody>
     ${L.map(u=>`<tr><td><strong>${esc(u.nome)}</strong>${u.email===me?` <span class="chip">você</span>`:""}<div class="sub">desde ${fmtD(String(u.criadoEm||"").slice(0,10))}</div></td><td class="num">${esc(u.email)}</td><td class="num">${esc(u.matricula||"—")}</td><td>${esc(u.setor||"—")}</td>
-      <td><select class="in" style="width:140px" data-usr="perfil" data-k="${esc(u._k)}" ${u.email===me?"disabled title='Você não pode mudar o próprio perfil'":""}>${Object.entries(PERFIS).map(([k,v])=>`<option value="${k}" ${u.perfil===k?"selected":""}>${v}</option>`).join("")}</select>${u.admin===true?`<div style="margin-top:6px"><span class="chip" style="background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600" title="Acesso total, inclusive Configurações">Administrador</span></div>`:""}</td>
+      <td><select class="in" style="width:150px" data-usr="perfil" data-k="${esc(u._k)}" title="${esc(PERFIL_RESUMO[perfilUI(u)])}" ${u.email===me?"disabled title='Você não pode mudar o próprio perfil'":""}>${Object.entries(PERFIS_UI).map(([k,v])=>`<option value="${k}" ${perfilUI(u)===k?"selected":""}>${v}</option>`).join("")}</select></td>
       <td>${esc(u.solicitadoPor||"—")}</td><td class="num">${(S.acessos||{})[u._k]?.ultimoAcesso?fmtDT((S.acessos||{})[u._k].ultimoAcesso):"nunca"}</td>
       <td>${u.ativo===false?`<span class="pill st-cancelado">Inativo</span>`:senhaPendente(u)?`<span class="pill st-analise">Senha temporária</span>`:`<span class="pill st-concluida">Ativo</span>`}</td>
       <td><div class="usract"><button class="btn small" data-act="usrreset" data-k="${esc(u._k)}">Resetar senha</button>
-        ${u.email===me?"":`<button class="btn small" data-act="usrativo" data-k="${esc(u._k)}">${u.ativo===false?"Reativar":"Inativar"}</button>`}</div></td></tr>`).join("")}
+        ${u.email===me?"":`<button class="btn small" data-act="usrativo" data-k="${esc(u._k)}">${u.ativo===false?"Reativar":"Inativar"}</button>`}
+        ${u.email!==me&&u.ativo===false?`<button class="btn small danger" data-act="usrdel" data-k="${esc(u._k)}" title="Remove do cadastro. As RMS da pessoa continuam no sistema.">Excluir</button>`:""}</div></td></tr>`).join("")}
     </tbody></table></div>`}
-    <p class="sub">"Senha temporária" = cadastro novo ou senha resetada, aguardando a pessoa entrar e criar a própria senha. Inativar bloqueia o login sem apagar o histórico.</p>
+    <p class="sub">"Senha temporária" = cadastro novo ou senha resetada, aguardando a pessoa entrar e criar a própria senha. Inativar bloqueia o login sem apagar o histórico. Só é possível <strong>excluir</strong> quem já está inativo; as RMS da pessoa continuam no sistema.</p>
    </div></section>`;
 }
 async function usrAcao(fn){ try{ await fn(); S.usrErr=""; render(); }catch(e){ console.error(e); toast(e?.code==="permission_denied"?"Somente Suprimentos (Editores) podem alterar usuários.":`Falha ao salvar: ${motivoErro(e)}`); } }
@@ -3306,6 +3342,8 @@ document.addEventListener("submit", ev=>{
   S.usrForm=f;
   if(f.nome.length<3){ S.usrErr="Informe o nome do usuário."; return render(); }
   if(!EMAIL_OK.test(f.email)){ S.usrErr="Informe um e-mail válido."; return render(); }
+  if(f.perfil==="administrador" && qtdAdmins()>=2){ S.usrErr="Já existem 2 Administradores (máximo). Escolha outro perfil."; return render(); }
+  if(f.perfil==="administrador"){ f.perfil="suprimentos"; f.admin=true; } else f.admin=false;
   if((S.usuarios||[]).some(u=>u._k===emailKey(f.email))){ S.usrErr=`${f.email} já está cadastrado. Use "Resetar senha" se a pessoa perdeu o acesso.`; return render(); }
   usrAcao(async()=>{ const senha=senhaTemporaria(), h=await hashSenha(senha), agora=new Date().toISOString(), por=S.auth.user?.nome||"Suprimentos";
     if(S.supa && !(await supaCriarConta(f.email, senha))){ await salvarUsuario({...f, ativo:true, criadoEm:agora, criadoPor:por, historico:[{em:agora, acao:`Cadastrado por ${por} (já tinha senha no sistema)`}]});
@@ -3320,12 +3358,25 @@ document.addEventListener("click", ev=>{
   else if(a==="usrreset" && u){ usrAcao(async()=>{ const senha=senhaTemporaria(), h=await hashSenha(senha), agora=new Date().toISOString(), por=S.auth.user?.nome||"Suprimentos";
       await salvarUsuario({...u, temp:{sal:h.sal,hash:h.hash,em:agora}, historico:[...(u.historico||[]), {em:agora, acao:`Senha resetada por ${por}`}]});
       S.usrSenha={titulo:`Senha de ${u.nome} resetada.`, nome:u.nome, email:u.email, senha}; toast("Senha resetada."); }); }
+  else if(a==="usrdel" && u){
+    if(u.ativo!==false){ toast("Inative a pessoa antes de excluir."); return; }
+    if(u.email===S.auth.user?.email){ toast("Você não pode excluir o próprio cadastro."); return; }
+    if(perfilUI(u)==="administrador" && qtdAdmins()<=1){ toast("Não é possível excluir o último Administrador."); return; }
+    const conf=prompt(`Excluir ${u.nome} do cadastro?\nAs RMS dessa pessoa continuam no sistema.\n\nPara confirmar, digite o e-mail: ${u.email}`);
+    if(conf==null) return;
+    if(String(conf).trim().toLowerCase()!==String(u.email).toLowerCase()){ toast("E-mail não confere. Nada foi excluído."); return; }
+    usrAcao(async()=>{ await excluirUsuario(u); toast(`${u.nome} excluído do cadastro.`); }); }
   else if(a==="usrativo" && u){ usrAcao(async()=>{ const agora=new Date().toISOString(), ativo=u.ativo===false;
       await salvarUsuario({...u, ativo, historico:[...(u.historico||[]), {em:agora, acao:`${ativo?"Reativado":"Inativado"} por ${S.auth.user?.nome||"Suprimentos"}`}]}); toast(`${u.nome} ${ativo?"reativado":"inativado"}.`); }); }
 });
+document.addEventListener("change", ev=>{ if(ev.target.id==="usrPerfil"){ const r=$("#usrRes"); if(r) r.textContent=PERFIL_RESUMO[ev.target.value]||""; } });
 document.addEventListener("change", ev=>{
   if(ev.target.dataset?.usr!=="perfil") return; const u=(S.usuarios||[]).find(x=>x._k===ev.target.dataset.k); if(!u) return;
-  usrAcao(async()=>{ const agora=new Date().toISOString(); await salvarUsuario({...u, perfil:ev.target.value, historico:[...(u.historico||[]), {em:agora, acao:`Perfil alterado para ${PERFIS[ev.target.value]} por ${S.auth.user?.nome||"Suprimentos"}`}]}); toast(`Perfil de ${u.nome} alterado para ${PERFIS[ev.target.value]}.`); });
+  const novo=ev.target.value, eraAdm=perfilUI(u)==="administrador";
+  if(novo==="administrador" && !eraAdm && qtdAdmins()>=2){ toast("Já existem 2 Administradores (máximo)."); return render(); }
+  if(eraAdm && novo!=="administrador" && qtdAdmins()<=1){ toast("Não é possível remover o último Administrador."); return render(); }
+  const perfil=novo==="administrador"?"suprimentos":novo, admin=novo==="administrador";
+  usrAcao(async()=>{ const agora=new Date().toISOString(); await salvarUsuario({...u, perfil, admin, historico:[...(u.historico||[]), {em:agora, acao:`Perfil alterado para ${PERFIS_UI[novo]} por ${S.auth.user?.nome||"Administrador"}`}]}); toast(`Perfil de ${u.nome} alterado para ${PERFIS_UI[novo]}.`); });
 });
 
 boot();
