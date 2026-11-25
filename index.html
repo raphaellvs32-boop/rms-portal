@@ -308,7 +308,7 @@ table.dil tr.edit td{background:var(--surface-2);padding:16px}
 .locknote{font-size:12.5px;color:#5c3a00;background:var(--warn-bg);border-radius:8px;padding:8px 10px}
 .ihead .idesc{flex:1;min-width:0;font-size:13px} .ihead .idesc div{margin-top:2px;overflow-wrap:anywhere}
 .isel input{width:16px;height:16px;margin-top:2px;accent-color:var(--accent)}
-.igrid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px}
+.igrid{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:10px}
 .igrid .span2{grid-column:span 2} .igrid .span8{grid-column:1/-1}
 .icard{gap:8px;padding:10px 14px} .igrid{row-gap:8px}
 @media (max-width:1100px){ .igrid{grid-template-columns:repeat(2,minmax(0,1fr))} .igrid .span2{grid-column:1/-1} .dform .span2r{grid-column:1/-1} }
@@ -820,6 +820,7 @@ function newDraft(){
 
 /* ---------- Render ---------- */
 function render(){
+  S.sujo=false;   // redesenho pedido pela própria tela (salvou, fechou, filtrou): nada pendente para proteger
   if(S.consulta && ["nova","editar","minhas"].includes(S.view)){ S.view="painel"; if(location.hash!=="#painel") history.replaceState(null,"","#painel"); }  // Consulta não emite RMS
   if((S.view==="nova"||S.view==="editar") && $("#frm") && S.draft) readForm();
   const vw = S.view==="painel" && !(S.canSup||S.canAlmox||S.consulta) ? "minhas" : S.view;
@@ -1042,7 +1043,7 @@ async function exportXlsx(){
       rows.push({"Nº RMS":fmtNum(r.id),"Item":i+1,"Código":it.codigo||"","Descrição":it.descricao||"","Qtd":x.qtd,"Un":it.un||"",
         "Data RMS":d(r.dataRms),"Prioridade":prOf(r).label,"Projeto":projOf(r),"Tipo":r.tipo||"","Solicitante":r.solicitante?.nome||"","Matrícula":r.solicitante?.matricula||"",
         "Data de necessidade":d(necOf(r)),"Status RMS":STATUS[stOf(r.id)].label,"Nº PR":sx.rcPr||"","Data PR":d(sx.dataRcPr),"Aprovação PR":d(sx.dataAprovPr),"Nº RC":sx.rcNum||"","PR bloqueada":prBloq(r)?"Sim":"Não","Dias com o gerente":diasGerente(r)??"",
-        "Grupo de compras":grupoLabel(sx),"Tipo de compra":sx.tipoCompra||"","Nº Pedido":x.pedido||"","Data do pedido":d(x.dataPedido),"Fornecedor":x.fornecedor||"","Data de remessa":d(x.dataRemessa),
+        "Grupo de compras":grupoLabel(sx),"Tipo de compra":sx.tipoCompra||"","Nº Pedido":x.pedido||"","Data do pedido":d(x.dataPedido),"Fornecedor":x.fornecedor||"","Frete":x.frete||"","Data de remessa":d(x.dataRemessa),
         "Remessa vencida":itemVencido(x)?"Sim":"Não","Nota fiscal":x.nf||"","Qtd entregue":en,"Qtd pendente":Math.max(0,x.qtd-en),"Situação do item":ENT[itemSit(x)].l,"Data da entrega":d(x.dataEntrega),
         "Obs. do item":x.obs||"","Situação da RMS":ENT[entregaOf(r).k].l,"Lead time RMS PR→entrega (dias)":leadTime(r)??"","Dias em aberto":diasAberto(r),"Observação geral":dg.obs||"","Entrega com restrição":dg.restricao&&RESTR[dg.restricao.tipo]?RESTR[dg.restricao.tipo]:"Sem restrição","Restrição desde":dg.restricao?.desde?fmtD(dg.restricao.desde):"","Motivo da restrição":dg.restricao?.obs||""}); }); });
   if(!rows.length){ toast("Não há linhas nesta aba para exportar."); return; }
@@ -1095,6 +1096,7 @@ function dilForm(r){
       <label class="f">Nº Pedido<input ${dis} class="in num" id="ipd-${k}" data-f="pedido" data-ic="${k}" value="${esc(x.pedido||"")}"></label>
       <label class="f">Data do pedido<input ${dis} class="in" type="date" id="idp-${k}" data-f="dataPedido" value="${esc(x.dataPedido||"")}"></label>
       <label class="f span2">Fornecedor<input ${dis} class="in" id="ifo-${k}" data-f="fornecedor" value="${esc(x.fornecedor||"")}"></label>
+      <label class="f">Frete<select ${dis} class="in" id="ifr-${k}" data-f="frete">${["","ZFT","FOB","CIF"].map(v=>`<option value="${v}" ${(x.frete||"")===v?"selected":""}>${v||"—"}</option>`).join("")}</select></label>
       <label class="f">Data de remessa<input ${dis} class="in" type="date" id="idr-${k}" data-f="dataRemessa" value="${esc(x.dataRemessa||"")}"></label>
       <label class="f">Nota fiscal<input ${dis} class="in num" id="inf-${k}" data-f="nf" value="${esc(x.nf||"")}"></label>
       <label class="f"><span style="white-space:nowrap">Qtd entregue <span style="font-weight:500">(de ${nfmt(x.qtd)})</span></span><input ${dis} class="in num" type="number" min="0" max="${x.qtd}" step="any" id="iqe-${k}" data-f="qtdEntregue" data-ic="${k}" data-q="${x.qtd}" value="${esc(en)}"></label>
@@ -1118,7 +1120,7 @@ function dilForm(r){
     <div class="f"><span>Situação</span><span>${entPill(r)}</span></div></fieldset>
    <fieldset class="full ilist"><legend>Itens (${its.length}) · cada item com seu pedido, remessa e NF</legend>${temPendente(r)?`<div class="pendchip" style="justify-self:start">Atenção: ${pendentesOf(r).length} item(ns) desta RMS ainda sem PR (${pendentesOf(r).map(i=>"item "+(i+1)).join(", ")}) · travado(s) até Suprimentos comprar</div>`:""}
     ${its.length>1?`<div class="bulk"><span class="sub" style="margin:0"><label><input type="checkbox" id="selall"> Marcar todos</label> · preencha e aplique aos itens marcados:</span>
-      <input class="in num" id="b-pedido" placeholder="Nº Pedido"><input class="in" type="date" id="b-dataPedido" title="Data do pedido"><input class="in" id="b-fornecedor" placeholder="Fornecedor"><input class="in" type="date" id="b-dataRemessa" title="Data de remessa"><input class="in num" id="b-nf" placeholder="Nota fiscal">
+      <input class="in num" id="b-pedido" placeholder="Nº Pedido"><input class="in" type="date" id="b-dataPedido" title="Data do pedido"><input class="in" id="b-fornecedor" placeholder="Fornecedor"><select class="in" id="b-frete" title="Frete" style="width:110px"><option value="">Frete</option><option>ZFT</option><option>FOB</option><option>CIF</option></select><input class="in" type="date" id="b-dataRemessa" title="Data de remessa"><input class="in num" id="b-nf" placeholder="Nota fiscal">
       <button class="btn small" data-act="bulkapply">Aplicar aos marcados</button><button class="btn small" data-act="bulkfull" title="Marca a quantidade total como entregue nos itens marcados">Entregue total</button></div>`:""}
     ${its.map(card).join("")}</fieldset>
    <fieldset class="full restrbox"><legend>Entrega com restrição</legend><div class="rgrid">
@@ -2067,13 +2069,26 @@ S.dia=today();
 setInterval(()=>{ if(today()!==S.dia){ S.dia=today(); softRender(); } }, 60000);
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden && today()!==S.dia){ S.dia=today(); softRender(); } });
 /* Atualizações remotas não interrompem quem está digitando: aguardam o campo perder o foco. */
+/* Edição em andamento (nota 084): enquanto houver algo digitado e ainda não salvo, atualizações do banco
+   NÃO redesenham a tela. Antes, o redesenho caía no clique do "Salvar": apagava os campos e o clique se perdia. */
+const NAO_SUJA=new Set(["q","dilQ","colt","gesMes","indPer","usrPerfil"]);
+function marcaSujo(ev){ const t=ev.target; if(!t||!t.matches||!t.matches("input,textarea,select")) return;
+  if(t.type==="search"||NAO_SUJA.has(t.id)||t.dataset.pp!=null||t.dataset.colv!=null||t.dataset.cfg||t.dataset.elem||t.dataset.usr||t.id==="selall"||t.classList.contains("selit")) return;
+  if(!t.closest("#overlayRoot,#dilRoot,#main")) return; S.sujo=true; }
+document.addEventListener("input",marcaSujo,true); document.addEventListener("change",marcaSujo,true);
+const editorAberto = () => !!(S.dilEdit || S.openId || ["nova","editar","config"].includes(S.view));
+let ptrDown=false;
+document.addEventListener("pointerdown",()=>{ ptrDown=true; },true);
+document.addEventListener("pointerup",()=>{ setTimeout(()=>{ ptrDown=false; if(S.pending && !S.sujo){ S.pending=false; softRender(); } },0); },true);
 function softRender(){
+  if(S.sujo && !editorAberto()) S.sujo=false;
+  if(S.sujo || ptrDown){ S.pending=true; return; }
   if(S.view==="dilig" && S.dilEdit){ S.pending=true; return; }
   const a=document.activeElement;
   if(a && a.closest && a.closest("#main, #overlayRoot, #dilRoot") && a.matches("input,textarea,select") && a.id!=="q" && a.id!=="dilQ"){ S.pending=true; return; }
   render();
 }
-document.addEventListener("focusout",()=>{ setTimeout(()=>{ if(S.pending){ S.pending=false; softRender(); } },0); });
+document.addEventListener("focusout",()=>{ setTimeout(()=>{ if(S.pending && !S.sujo && !ptrDown){ S.pending=false; softRender(); } },0); });
 
 /* ---------- Filtros nos títulos das colunas (Fila de compras) ---------- */
 const necFaixa = r => { const n=necOf(r); if(!n) return "Sem data"; const t=today(); if(n<t&&!isFinal(r.id)) return "Atrasada"; const d=diasUteis(t,n); return d<=5?"Próximos 5 dias úteis":"Mais de 5 dias úteis"; };
@@ -2970,7 +2985,7 @@ document.addEventListener("click",async ev=>{
     if(!sel.length){ toast("Marque os itens que vão receber os dados."); return; }
     sel.forEach(i=>{ const k=id+"-"+i;
       if(a==="bulkfull"){ const qe=$("#iqe-"+CSS.escape(k)); qe.value=qe.dataset.q; qe.dispatchEvent(new Event("input",{bubbles:true})); return; }
-      [["pedido","ipd"],["dataPedido","idp"],["fornecedor","ifo"],["dataRemessa","idr"],["nf","inf"]].forEach(([f,pfx])=>{ const v=$("#b-"+f).value.trim(); if(v){ const el=$("#"+pfx+"-"+CSS.escape(k)); el.value=v; el.dispatchEvent(new Event("input",{bubbles:true})); } }); });
+      [["pedido","ipd"],["dataPedido","idp"],["fornecedor","ifo"],["frete","ifr"],["dataRemessa","idr"],["nf","inf"]].forEach(([f,pfx])=>{ const v=$("#b-"+f).value.trim(); if(v){ const el=$("#"+pfx+"-"+CSS.escape(k)); if(!el||el.disabled) return; el.value=v; el.dispatchEvent(new Event("input",{bubbles:true})); el.dispatchEvent(new Event("change",{bubbles:true})); } }); });
     toast(a==="bulkfull"?`Quantidade total marcada como entregue em ${sel.length} item(ns). Salve para gravar.`:`Dados aplicados a ${sel.length} item(ns). Salve para gravar.`);
   }
   else if(a==="dilsave"){
@@ -2987,8 +3002,8 @@ document.addEventListener("click",async ev=>{
     const itens=[];
     for(let i=0;i<its.length;i++){
       const k=id+"-"+i, q=+its[i].qtd||0, gi=p=>$("#"+p+"-"+CSS.escape(k)), n=`Item ${i+1}`;
-      if(itemSemPrTrava(r,i,old[i])){ const o=old[i]||{}; itens.push({pedido:o.pedido||"",dataPedido:o.dataPedido||"",fornecedor:o.fornecedor||"",dataRemessa:o.dataRemessa||"",nf:o.nf||"",qtdEntregue:itemEnt(o),dataEntrega:o.dataEntrega||"",obs:o.obs||""}); continue; }
-      const x={pedido:gi("ipd").value.trim(), dataPedido:gi("idp").value, fornecedor:gi("ifo").value.trim(), dataRemessa:gi("idr").value, nf:gi("inf").value.trim(), qtdEntregue:parseFloat(gi("iqe").value)||0, dataEntrega:gi("ide").value, obs:gi("iob").value.trim()};
+      if(itemSemPrTrava(r,i,old[i])){ const o=old[i]||{}; itens.push({pedido:o.pedido||"",dataPedido:o.dataPedido||"",fornecedor:o.fornecedor||"",frete:o.frete||"",dataRemessa:o.dataRemessa||"",nf:o.nf||"",qtdEntregue:itemEnt(o),dataEntrega:o.dataEntrega||"",obs:o.obs||""}); continue; }
+      const x={pedido:gi("ipd").value.trim(), dataPedido:gi("idp").value, fornecedor:gi("ifo").value.trim(), frete:gi("ifr")?.value||"", dataRemessa:gi("idr").value, nf:gi("inf").value.trim(), qtdEntregue:parseFloat(gi("iqe").value)||0, dataEntrega:gi("ide").value, obs:gi("iob").value.trim()};
       if(x.qtdEntregue<0) return bad(gi("iqe"),`${n}: a quantidade entregue não pode ser negativa.`);
       if(x.qtdEntregue>q) return bad(gi("iqe"),`${n}: a quantidade entregue (${nfmt(x.qtdEntregue)}) é maior que a do item (${nfmt(q)}).`);
       if(x.qtdEntregue>0 && !x.pedido) return bad(gi("ipd"),`${n}: informe o nº do pedido antes de registrar entrega.`);
@@ -3027,7 +3042,7 @@ document.addEventListener("click",async ev=>{
     if(v.rs && !rOld){ dPatch.restricao={tipo:v.rs, desde:hoje, obs:v.rso, por:quem}; rChanged=true; }
     else if(v.rs && rOld && (v.rs!==rOld.tipo||v.rso!==(rOld.obs||""))){ dPatch.restricao={...rOld, tipo:v.rs, obs:v.rso}; rChanged=true; }
     else if(!v.rs && rOld){ dPatch.restricao=null; dPatch.restricoes=[...restrHist(r), {...rOld, ate:hoje, liberadoPor:quem}]; rChanged=true; }
-    const dChanged = rChanged || v.obs!==(dg.obs||"") || JSON.stringify(itens)!==JSON.stringify(old.map(o=>({pedido:o.pedido||"",dataPedido:o.dataPedido||"",fornecedor:o.fornecedor||"",dataRemessa:o.dataRemessa||"",nf:o.nf||"",qtdEntregue:itemEnt(o),dataEntrega:o.dataEntrega||"",obs:o.obs||""})));
+    const dChanged = rChanged || v.obs!==(dg.obs||"") || JSON.stringify(itens)!==JSON.stringify(old.map(o=>({pedido:o.pedido||"",dataPedido:o.dataPedido||"",fornecedor:o.fornecedor||"",frete:o.frete||"",dataRemessa:o.dataRemessa||"",nf:o.nf||"",qtdEntregue:itemEnt(o),dataEntrega:o.dataEntrega||"",obs:o.obs||""})));
     if(!ev.length && !dChanged){ S.dilEdit=null; S.dilKeep=null; toast(`RMS ${fmtNum(id)}: nada mudou.`); render(); window.scrollTo(0,0); return; }
     t.disabled=true;
     try{
