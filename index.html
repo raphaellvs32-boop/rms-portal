@@ -3350,6 +3350,7 @@ function lgFlowAnim(){ clearInterval(S._lgFlow); const L=[...document.querySelec
 /* App instalável (nota 075): service worker no site publicado + botão "Instalar app" */
 
 /* ---------- Avisos no celular (push) — nota 087 ---------- */
+const PUSH_FUNCAO="dynamic-service";   // nome que o Supabase deu à função de avisos (nota 087)
 const VAPID_PUBLICA="BMAURYM2sZhvBa5lOKjbEUCYA5QhBxbEUdLL7CsuVaRN3niRfrFCnC28lVSkbdzGYpsgaPMhMFOz6vqQa2F0Fmw";  // chave pública (a privada fica só no Supabase)
 const pushSuportado = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 const ehIphone = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
@@ -3390,14 +3391,14 @@ async function pushTeste(silencioso){
   const est=await pushEstado(); d.push(linha(est.k==="ativo","Este aparelho está com os avisos ativos"));
   let r=null, j={};
   try{ const {data:{session}}=await S.sb.auth.getSession();
-    r=await fetch(RMS_SUPABASE.url+"/functions/v1/rms-push",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(session?.access_token||""),"apikey":RMS_SUPABASE.key},body:JSON.stringify({teste:true})});
+    r=await fetch(RMS_SUPABASE.url+"/functions/v1/"+PUSH_FUNCAO,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+(session?.access_token||""),"apikey":RMS_SUPABASE.key},body:JSON.stringify({teste:true})});
     j=await r.json().catch(()=>({}));
   }catch{ r=null; }
-  if(!r){ d.push(linha(false,"Sem resposta da função de avisos: confira a internet. Se a internet está ok, a função <b>rms-push</b> ainda não foi publicada no Supabase.")); }
-  else if(r.status===404){ d.push(linha(false,"A função <b>rms-push</b> não foi encontrada no Supabase (Edge Functions). Publique com esse nome exato.")); }
-  else if(r.status===401){ d.push(linha(true,"Função rms-push publicada")); d.push(linha(false,"A função recusou o acesso: desligue <b>Verify JWT / Enforce JWT Verification</b> nos detalhes da função.")); }
-  else if(!r.ok){ d.push(linha(true,"Função rms-push publicada")); d.push(linha(false,/VAPID/.test(j.erro||"")?"Faltam as chaves <b>VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY</b> em Edge Functions → Secrets.":"Erro na função: "+esc(j.erro||("código "+r.status)))); }
-  else { d.push(linha(true,"Função rms-push publicada e com as chaves"));
+  if(!r){ d.push(linha(false,`Sem resposta da função de avisos: confira a internet. Se a internet está ok, a função de avisos (<b>${PUSH_FUNCAO}</b>) não está publicada no Supabase.`)); }
+  else if(r.status===404){ d.push(linha(false,`A função de avisos (<b>${PUSH_FUNCAO}</b>) não foi encontrada no Supabase (Edge Functions).`)); }
+  else if(r.status===401){ d.push(linha(true,"Função de avisos publicada")); d.push(linha(false,"A função recusou o acesso: desligue <b>Verify JWT / Enforce JWT Verification</b> nos detalhes da função.")); }
+  else if(!r.ok){ d.push(linha(true,"Função de avisos publicada")); d.push(linha(false,/VAPID/.test(j.erro||"")?"Faltam as chaves <b>VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY</b> em Edge Functions → Secrets.":"Erro na função: "+esc(j.erro||("código "+r.status)))); }
+  else { d.push(linha(true,"Função de avisos publicada e com as chaves"));
     d.push(j.enviados?linha(true,`Aviso de teste enviado para ${j.enviados} aparelho(s). Deve chegar em alguns segundos.`):linha(false,"Nenhum aparelho seu cadastrado no banco. Toque em <b>Ativar avisos neste aparelho</b>; se já ativou, rode o <b>push.sql</b> no SQL Editor.")); }
   S.pushDiag=d.join(""); if(!silencioso||!(r&&r.ok&&j.enviados)) renderPush();
   if(!silencioso) toast(r&&r.ok&&j.enviados?"Aviso de teste enviado.":"Os avisos ainda não estão prontos: veja o que falta no painel.");
