@@ -1,0 +1,6 @@
+Bibliotecas servidas pelo próprio site (nota 092 · auditoria item 15):
+- supabase.js                     @supabase/supabase-js 2.118.0 (npm)
+- xlsx.full.min.js                SheetJS 0.20.3 (cdn.sheetjs.com) — corrige CVE-2023-30533 e CVE-2024-22363
+- jspdf.umd.min.js                jsPDF 3.0.3 (npm) — corrige CVE-2025-29907
+- jspdf.plugin.autotable.min.js   jspdf-autotable 5.0.2 (npm)
+Para atualizar: baixar a versão nova da fonte oficial, substituir o arquivo e rodar os testes (tBibliotecasSobDemanda.js).

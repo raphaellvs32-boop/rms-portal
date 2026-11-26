@@ -1,7 +1,7 @@
 /* Requisição de Materiais e Serviços · service worker (nota 075)
    - Páginas do próprio site: busca sempre a versão nova na rede; sem rede, usa a última cópia guardada.
    - Dados (Supabase) e bibliotecas externas: nunca guardados aqui (sempre ao vivo). */
-const CACHE = "rms-app-v2";
+const CACHE = "rms-app-v3";   // v3: bibliotecas servidas pelo próprio site (nota 092)
 const BASE = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(BASE)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

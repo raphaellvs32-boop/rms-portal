@@ -1,4 +1,4 @@
-<!doctype html><html lang="pt-BR"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#84BD00"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="RMS"><meta name="apple-mobile-web-app-status-bar-style" content="default"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html lang="pt-BR"><head><meta charset=utf8><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://mcuglgvkkhzfgdhndlhg.supabase.co wss://mcuglgvkkhzfgdhndlhg.supabase.co; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"><meta name="referrer" content="strict-origin-when-cross-origin"><script>if(window.top!==window.self){try{window.top.location=window.self.location;}catch(e){document.documentElement.style.display='none';}}</script><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#84BD00"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="RMS"><meta name="apple-mobile-web-app-status-bar-style" content="default"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>Requisição de Materiais e Serviços</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -589,7 +589,7 @@ body.so-ver [data-act="getanx"],body.so-ver [data-act="editrms"],body.so-ver [da
 <div id="notifRoot"></div>
 <div id="toastRoot"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+<script src="lib/supabase.js"></script>
 <script>
 "use strict";
 const STATUS = {
@@ -1043,8 +1043,9 @@ async function saveFile(filename, data){
   const url=URL.createObjectURL(data instanceof Blob?data:new Blob([data])); const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
 }
 /* Bibliotecas de Excel e PDF só são baixadas quando alguém exporta/importa (nota 086: abre mais rápido no celular) */
-const LIBS={xlsx:["https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"],
-  pdf:["https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js","https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"]};
+/* Versões corrigidas (nota 092): no site publicado viram "lib/<arquivo>" (servidas pelo próprio site, sem CDN) */
+const LIBS={xlsx:["lib/xlsx.full.min.js"],
+  pdf:["lib/jspdf.umd.min.js","lib/jspdf.plugin.autotable.min.js"]};
 const _libCarga={};
 function carregarLib(k){
   if(k==="xlsx"&&window.XLSX) return Promise.resolve(); if(k==="pdf"&&window.jspdf?.jsPDF?.API?.autoTable) return Promise.resolve();
@@ -2398,11 +2399,15 @@ async function supaSubmit(){
 async function supaCriarConta(email, senha){
   const tmp=window.supabase.createClient(RMS_SUPABASE.url, RMS_SUPABASE.key, {auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false, storageKey:"rms-cadastro"}});
   const {data,error}=await tmp.auth.signUp({email, password:senha, options:{emailRedirectTo:supaVoltar()}});
+  supaCriarConta.uid=null;
   if(error){ if(/already registered|already been registered|user_already_exists/i.test((error.message||"")+(error.code||""))) return "existente"; throw new Error(supaMsg(error)); }
-  if(data?.session){ try{ await tmp.auth.signOut(); }catch{} return "liberado"; }
   if(data?.user && Array.isArray(data.user.identities) && data.user.identities.length===0) return "existente";   // Supabase esconde contas já existentes
+  supaCriarConta.uid=data?.user?.id||data?.session?.user?.id||null;   // vínculo do login com o cadastro (auditoria item 8)
+  if(data?.session){ try{ await tmp.auth.signOut(); }catch{} return "liberado"; }
   return "bloqueado";
 }
+/* Conta já existente: o Administrador busca o código (uid) dela para vincular ao cadastro */
+async function supaUidPorEmail(email){ try{ const {data,error}=await S.sb.rpc("rms_uid_por_email",{email}); return error?null:(data||null); }catch{ return null; } }
 const avisoConfHtml = () => S.supa && S._confEmail===true ? `<div class="errors" role="alert" style="margin:0 0 12px"><strong>Atenção: usuários novos NÃO conseguem entrar.</strong> No Supabase, "Confirm email" está ligado e o e-mail de confirmação não é entregue. Desligue em <b>Authentication → Sign In / Providers → Email → Confirm email</b> e salve. Depois, use "Resetar senha" em quem foi cadastrado com o login bloqueado.</div>` : "";
 /* "Confirm email" ligado no Supabase? (leitura pública das configurações de login) */
 async function supaConfirmaEmailLigado(){ try{ const r=await fetch(RMS_SUPABASE.url+"/auth/v1/settings",{headers:{apikey:RMS_SUPABASE.key}}); const j=await r.json(); return j.mailer_autoconfirm===false; }catch{ return null; } }
@@ -3236,10 +3241,12 @@ async function hashSenha(senha, salB64){
   const bits=await crypto.subtle.deriveBits({name:"PBKDF2", salt:sal, iterations:150000, hash:"SHA-256"}, key, 256);
   return {sal:b64u(sal), hash:b64u(bits)};
 }
-function senhaTemporaria(){
-  const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789", r=crypto.getRandomValues(new Uint8Array(8));
-  const p=[...r].map(x=>A[x%A.length]).join(""); return `Usi-${p.slice(0,4)}-${p.slice(4)}`;
+function senhaTemporaria(){   /* 12 caracteres aleatórios (≈60 bits), sem prefixo fixo (nota 092 · auditoria item 9) */
+  const A="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789", r=crypto.getRandomValues(new Uint32Array(12));
+  const p=[...r].map(x=>A[x%A.length]).join(""); return `${p.slice(0,4)}-${p.slice(4,8)}-${p.slice(8)}`;
 }
+/* No site (Supabase) a senha fica só no Supabase: o cadastro guarda apenas a DATA da senha temporária, nunca o hash (auditoria item 9/16) */
+const marcaTemp = (h, agora) => S.supa ? {em:agora} : {sal:h.sal, hash:h.hash, em:agora};
 /* armazenamento */
 async function lerUsuario(email){
   const k=emailKey(email);
@@ -3566,9 +3573,11 @@ document.addEventListener("submit", ev=>{
   if((S.usuarios||[]).some(u=>u._k===emailKey(f.email))){ S.usrErr=`${f.email} já está cadastrado. Use "Resetar senha" se a pessoa perdeu o acesso.`; return render(); }
   usrAcao(async()=>{ const senha=senhaTemporaria(), h=await hashSenha(senha), agora=new Date().toISOString(), por=S.auth.user?.nome||"Suprimentos";
     const res = S.supa ? await supaCriarConta(f.email, senha) : "liberado";
+    const uidNovo = S.supa ? (res==="existente" ? await supaUidPorEmail(f.email) : supaCriarConta.uid) : null;
+    if(uidNovo) f.uid=uidNovo;
     if(res==="existente"){ await salvarUsuario({...f, ativo:true, criadoEm:agora, criadoPor:por, historico:[{em:agora, acao:`Cadastrado por ${por} (já existia login com este e-mail)`}]});
       S.usrForm={}; S.usrSenha={titulo:`${f.nome} cadastrado, mas ATENÇÃO`, nome:f.nome, email:f.email, senha:null, alerta:"Já existia um login com este e-mail, criado fora deste cadastro. A pessoa entra com a senha que já tinha. Se ela não criou esse login, por segurança apague-o no Supabase (Authentication → Users) e use \"Resetar senha\" aqui."}; toast("Cadastrado: já existia login com este e-mail."); return; }
-    await salvarUsuario({...f, ativo:true, criadoEm:agora, criadoPor:por, temp:{sal:h.sal,hash:h.hash,em:agora}, historico:[{em:agora, acao:`Cadastrado por ${por}${f.solicitadoPor?` a pedido de ${f.solicitadoPor}`:""}`}]});
+    await salvarUsuario({...f, ativo:true, criadoEm:agora, criadoPor:por, temp:marcaTemp(h,agora), historico:[{em:agora, acao:`Cadastrado por ${por}${f.solicitadoPor?` a pedido de ${f.solicitadoPor}`:""}`}]});
     S.usrSenha={titulo:res==="bloqueado"?`${f.nome} cadastrado, mas o login está BLOQUEADO`:`Usuário ${f.nome} cadastrado. Já pode entrar.`, nome:f.nome, email:f.email, senha,
       alerta:res==="bloqueado"?"O Supabase está exigindo confirmação de e-mail (\"Confirm email\" ligado) e esse e-mail não chega. Desligue em Supabase → Authentication → Sign In / Providers → Email → Confirm email, e depois clique em \"Resetar senha\" nesta pessoa para liberar.":null};
     S.usrForm={}; toast(res==="bloqueado"?"Cadastrado, mas o login ficou bloqueado: veja o aviso.":"Usuário cadastrado e liberado."); });
@@ -3580,7 +3589,7 @@ document.addEventListener("click", ev=>{
       // 1º tenta (re)criar o login com uma senha temporária nova (funciona se o login não existe ou ficou bloqueado sem confirmação)
       const senha=senhaTemporaria(), h=await hashSenha(senha), agora=new Date().toISOString(), por=S.auth.user?.nome||"Administrador";
       const res=await supaCriarConta(u.email, senha);
-      if(res==="liberado"){ await salvarUsuario({...u, ativo:true, temp:{sal:h.sal,hash:h.hash,em:agora}, historico:[...(u.historico||[]), {em:agora, acao:`Acesso liberado com senha temporária nova por ${por}`}]});
+      if(res==="liberado"){ await salvarUsuario({...u, ativo:true, ...(supaCriarConta.uid?{uid:supaCriarConta.uid}:{}), temp:marcaTemp(h,agora), historico:[...(u.historico||[]), {em:agora, acao:`Acesso liberado com senha temporária nova por ${por}`}]});
         S.usrSenha={titulo:`Acesso de ${u.nome} liberado.`, nome:u.nome, email:u.email, senha}; toast("Acesso liberado com senha temporária nova."); return; }
       if(res==="bloqueado"){ S._confEmail=true; S.usrSenha={titulo:`Não foi possível liberar ${u.nome}`, nome:u.nome, email:u.email, senha:null, alerta:"O Supabase ainda exige confirmação de e-mail (\"Confirm email\" ligado). Desligue em Authentication → Sign In / Providers → Email e clique em Resetar senha de novo."}; toast("Login continua bloqueado: veja o aviso."); return; }
       // login já existe e está ativo: link por e-mail (só chega com servidor de e-mail configurado no Supabase)
