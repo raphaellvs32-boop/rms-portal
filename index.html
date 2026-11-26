@@ -547,6 +547,7 @@ body.so-ver [data-act="getanx"],body.so-ver [data-act="editrms"],body.so-ver [da
 @media (max-width:760px){.lb2{display:none}}
 .pushnov{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:13px}
 .pushdiag{display:grid;gap:4px;font-size:12.5px;padding:10px 12px;border-radius:9px;background:#f8fafc;border:1px dashed var(--line)}.pushdiag .dok{color:#4F7A00}.pushdiag .dno{color:#b91c1c}
+.pwbox.pwalerta{border-color:#fca5a5;background:#fef2f2}.pwmsg{margin-top:6px;color:#991b1b;font-size:13px}
 </style>
 
 <div class="top">
@@ -2343,7 +2344,7 @@ function loginSupaBody(a, err){
       <label class="f">Senha<span class="lg-pw"><input class="in" id="lgSenha" type="password" autocomplete="current-password"><button type="button" class="btn small" data-act="lgver" aria-label="Mostrar senha">Mostrar</button></span></label>
       <label class="lg-mem"><input type="checkbox" id="lgMem" ${a.mem?"checked":""}> Lembrar login <small>(${MEM_DIAS} dias neste computador)</small></label>
       ${a.info?`<div class="okbox" role="status"><div>${esc(a.info)}</div></div>`:""}${err}<button class="btn primary lg-btn" type="submit">Entrar</button>
-      <div class="lg-links"><button class="btn link" type="button" data-act="lgprimeiro">Primeiro acesso? Criar minha senha</button> · <button class="btn link" type="button" data-act="lgesqueci">Esqueci minha senha</button></div>
+      <div class="lg-links"><span class="lg-info" style="margin:0">Primeiro acesso: use a senha temporária que o administrador passou.</span> · <button class="btn link" type="button" data-act="lgesqueci">Esqueci minha senha</button></div>
     </form>
     <p class="lg-info" style="text-align:center">Não tem acesso? Peça ao seu supervisor para solicitar o cadastro ao Suprimentos.</p>`;
 }
@@ -2390,12 +2391,21 @@ async function supaSubmit(){
     a.info=`Se ${email} estiver cadastrado, você vai receber um e-mail com o link para criar uma nova senha.`; return renderLogin();
   }
 }
+/* Cria o login da pessoa no Supabase (nota 091). Resultado:
+   "liberado"  → já pode entrar com a senha temporária;
+   "bloqueado" → criado, mas o Supabase exige confirmar o e-mail ("Confirm email" ligado) e o e-mail não chega;
+   "existente" → já havia um login com este e-mail, criado fora deste cadastro. */
 async function supaCriarConta(email, senha){
   const tmp=window.supabase.createClient(RMS_SUPABASE.url, RMS_SUPABASE.key, {auth:{persistSession:false, autoRefreshToken:false, detectSessionInUrl:false, storageKey:"rms-cadastro"}});
-  const {error}=await tmp.auth.signUp({email, password:senha, options:{emailRedirectTo:supaVoltar()}});
-  if(error && !/already registered|already been registered/i.test(error.message||"")) throw new Error(supaMsg(error));
-  return !error;
+  const {data,error}=await tmp.auth.signUp({email, password:senha, options:{emailRedirectTo:supaVoltar()}});
+  if(error){ if(/already registered|already been registered|user_already_exists/i.test((error.message||"")+(error.code||""))) return "existente"; throw new Error(supaMsg(error)); }
+  if(data?.session){ try{ await tmp.auth.signOut(); }catch{} return "liberado"; }
+  if(data?.user && Array.isArray(data.user.identities) && data.user.identities.length===0) return "existente";   // Supabase esconde contas já existentes
+  return "bloqueado";
 }
+const avisoConfHtml = () => S.supa && S._confEmail===true ? `<div class="errors" role="alert" style="margin:0 0 12px"><strong>Atenção: usuários novos NÃO conseguem entrar.</strong> No Supabase, "Confirm email" está ligado e o e-mail de confirmação não é entregue. Desligue em <b>Authentication → Sign In / Providers → Email → Confirm email</b> e salve. Depois, use "Resetar senha" em quem foi cadastrado com o login bloqueado.</div>` : "";
+/* "Confirm email" ligado no Supabase? (leitura pública das configurações de login) */
+async function supaConfirmaEmailLigado(){ try{ const r=await fetch(RMS_SUPABASE.url+"/auth/v1/settings",{headers:{apikey:RMS_SUPABASE.key}}); const j=await r.json(); return j.mailer_autoconfirm===false; }catch{ return null; } }
 
 /* ---------- Locais de retirada (cadastro na guia do Almoxarifado) ---------- */
 const LOCAIS_DEF=["Almoxarifado Central · balcão 1","Almoxarifado Central · balcão 2","Almoxarifado da Oficina Mecânica"];
@@ -3514,9 +3524,11 @@ document.addEventListener("click", ev=>{
 function usuariosPanel(){
   const L=[...(S.usuarios||[])].sort((a,b)=>String(a.nome).localeCompare(String(b.nome))), f=S.usrForm||{}, e=S.usrErr||"";
   const me=S.auth.user?.email;
+  if(S.supa && S._confEmail===undefined){ S._confEmail=null; supaConfirmaEmailLigado().then(v=>{ S._confEmail=v; const el=$("#avisoConf"); if(el) el.innerHTML=avisoConfHtml(); }); }
+  const avisoConf = `<div id="avisoConf">${avisoConfHtml()}</div>`;
   return `<section class="panel" id="usuarios"><header><h3>Usuários do portal</h3><span class="hsub">${L.filter(u=>u.ativo!==false).length} ativo(s) · ${L.length} cadastrado(s)</span></header>
    <div class="body">
-    <p class="sub" style="margin:0 0 12px">Cadastre quem pode entrar no portal, por exemplo a pedido do supervisor. O portal gera uma <strong>senha temporária</strong>; no primeiro login a pessoa cria a própria senha.</p>
+    ${avisoConf}<p class="sub" style="margin:0 0 12px">Cadastre quem pode entrar no portal, por exemplo a pedido do supervisor. O portal gera uma <strong>senha temporária</strong>; no primeiro login a pessoa cria a própria senha.</p>
     <form id="usrFrm" class="grid g4" novalidate>
       <label class="f"><span>Nome <span class="req">*</span></span><input class="in" id="usrNome" value="${esc(f.nome||"")}" autocomplete="off"></label>
       <label class="f"><span>E-mail <span class="req">*</span></span><input class="in" id="usrEmail" type="email" value="${esc(f.email||"")}" placeholder="nome@empresa.com.br" autocomplete="off"></label>
@@ -3527,9 +3539,9 @@ function usuariosPanel(){
       <div style="display:flex;align-items:flex-end"><button type="submit" class="btn primary" style="width:100%">Cadastrar usuário</button></div>
       ${e?`<div class="errors" role="alert" style="grid-column:1/-1">${esc(e)}</div>`:""}
     </form>
-    ${S.usrSenha?`<div class="pwbox" role="status"><div><strong>${esc(S.usrSenha.titulo)}</strong><div class="sub" style="margin:2px 0 0">Passe estes dados para ${esc(S.usrSenha.nome)}. A senha temporária aparece só agora; depois, só gerando outra.</div></div>
-      <div class="pwline"><span>E-mail: <strong class="num">${esc(S.usrSenha.email)}</strong></span><span>Senha temporária: <strong class="num pw">${esc(S.usrSenha.senha)}</strong></span></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn small primary" data-act="copy" data-txt="${esc(`Acesso ao portal Requisição de Materiais e Serviços\nLogin: ${S.usrSenha.email}\nSenha temporária: ${S.usrSenha.senha}\nNo primeiro acesso você vai criar sua senha pessoal.`)}" data-ok="Dados de acesso copiados.">Copiar dados de acesso</button><button class="btn small" data-act="usrok">Fechar</button></div></div>`:""}
+    ${S.usrSenha?`<div class="pwbox ${S.usrSenha.alerta?"pwalerta":""}" role="status"><div><strong>${esc(S.usrSenha.titulo)}</strong>${S.usrSenha.alerta?`<div class="pwmsg">${esc(S.usrSenha.alerta)}</div>`:""}${S.usrSenha.senha?`<div class="sub" style="margin:2px 0 0">Passe estes dados para ${esc(S.usrSenha.nome)}. A senha temporária aparece só agora; depois, só gerando outra.</div>`:""}</div>
+      ${S.usrSenha.senha?`<div class="pwline"><span>E-mail: <strong class="num">${esc(S.usrSenha.email)}</strong></span><span>Senha temporária: <strong class="num pw">${esc(S.usrSenha.senha)}</strong></span></div>`:""}
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${S.usrSenha.senha?`<button class="btn small primary" data-act="copy" data-txt="${esc(`Acesso ao portal Requisição de Materiais e Serviços\nLogin: ${S.usrSenha.email}\nSenha temporária: ${S.usrSenha.senha}\nNo primeiro acesso você vai criar sua senha pessoal.`)}" data-ok="Dados de acesso copiados.">Copiar dados de acesso</button>`:""}<button class="btn small" data-act="usrok">Fechar</button></div></div>`:""}
     ${!L.length?`<div class="empty">Nenhum usuário cadastrado.</div>`:`<div class="tw" style="margin-top:14px"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Matrícula</th><th>Setor</th><th>Perfil</th><th>Solicitado por</th><th>Último acesso</th><th>Situação</th><th></th></tr></thead><tbody>
     ${L.map(u=>`<tr><td><strong>${esc(u.nome)}</strong>${u.email===me?` <span class="chip">você</span>`:""}<div class="sub">desde ${fmtD(String(u.criadoEm||"").slice(0,10))}</div></td><td class="num">${esc(u.email)}</td><td class="num">${esc(u.matricula||"—")}</td><td>${esc(u.setor||"—")}</td>
       <td><select class="in" style="width:150px" data-usr="perfil" data-k="${esc(u._k)}" title="${esc(PERFIL_RESUMO[perfilUI(u)])}" ${u.email===me?"disabled title='Você não pode mudar o próprio perfil'":""}>${Object.entries(PERFIS_UI).map(([k,v])=>`<option value="${k}" ${perfilUI(u)===k?"selected":""}>${v}</option>`).join("")}</select></td>
@@ -3553,15 +3565,28 @@ document.addEventListener("submit", ev=>{
   if(f.perfil==="administrador"){ f.perfil="suprimentos"; f.admin=true; } else f.admin=false;
   if((S.usuarios||[]).some(u=>u._k===emailKey(f.email))){ S.usrErr=`${f.email} já está cadastrado. Use "Resetar senha" se a pessoa perdeu o acesso.`; return render(); }
   usrAcao(async()=>{ const senha=senhaTemporaria(), h=await hashSenha(senha), agora=new Date().toISOString(), por=S.auth.user?.nome||"Suprimentos";
-    if(S.supa && !(await supaCriarConta(f.email, senha))){ await salvarUsuario({...f, ativo:true, criadoEm:agora, criadoPor:por, historico:[{em:agora, acao:`Cadastrado por ${por} (já tinha senha no sistema)`}]});
-      S.usrForm={}; toast(`${f.nome} cadastrado. Esse e-mail já tinha senha: a pessoa entra com a senha dela ou usa "Esqueci minha senha".`); return; }
+    const res = S.supa ? await supaCriarConta(f.email, senha) : "liberado";
+    if(res==="existente"){ await salvarUsuario({...f, ativo:true, criadoEm:agora, criadoPor:por, historico:[{em:agora, acao:`Cadastrado por ${por} (já existia login com este e-mail)`}]});
+      S.usrForm={}; S.usrSenha={titulo:`${f.nome} cadastrado, mas ATENÇÃO`, nome:f.nome, email:f.email, senha:null, alerta:"Já existia um login com este e-mail, criado fora deste cadastro. A pessoa entra com a senha que já tinha. Se ela não criou esse login, por segurança apague-o no Supabase (Authentication → Users) e use \"Resetar senha\" aqui."}; toast("Cadastrado: já existia login com este e-mail."); return; }
     await salvarUsuario({...f, ativo:true, criadoEm:agora, criadoPor:por, temp:{sal:h.sal,hash:h.hash,em:agora}, historico:[{em:agora, acao:`Cadastrado por ${por}${f.solicitadoPor?` a pedido de ${f.solicitadoPor}`:""}`}]});
-    S.usrSenha={titulo:`Usuário ${f.nome} cadastrado.`, nome:f.nome, email:f.email, senha}; S.usrForm={}; toast("Usuário cadastrado."); });
+    S.usrSenha={titulo:res==="bloqueado"?`${f.nome} cadastrado, mas o login está BLOQUEADO`:`Usuário ${f.nome} cadastrado. Já pode entrar.`, nome:f.nome, email:f.email, senha,
+      alerta:res==="bloqueado"?"O Supabase está exigindo confirmação de e-mail (\"Confirm email\" ligado) e esse e-mail não chega. Desligue em Supabase → Authentication → Sign In / Providers → Email → Confirm email, e depois clique em \"Resetar senha\" nesta pessoa para liberar.":null};
+    S.usrForm={}; toast(res==="bloqueado"?"Cadastrado, mas o login ficou bloqueado: veja o aviso.":"Usuário cadastrado e liberado."); });
 });
 document.addEventListener("click", ev=>{
   const t=ev.target.closest("[data-act]"); if(!t) return; const a=t.dataset.act, u=(S.usuarios||[]).find(x=>x._k===t.dataset.k);
   if(a==="usrok"){ S.usrSenha=null; render(); }
-  else if(a==="usrreset" && u && S.supa){ usrAcao(async()=>{ const {error}=await S.sb.auth.resetPasswordForEmail(u.email,{redirectTo:supaVoltar()}); if(error) throw new Error(supaMsg(error)); toast(`Enviamos para ${u.email} um link para criar uma nova senha.`); }); }
+  else if(a==="usrreset" && u && S.supa){ usrAcao(async()=>{
+      // 1º tenta (re)criar o login com uma senha temporária nova (funciona se o login não existe ou ficou bloqueado sem confirmação)
+      const senha=senhaTemporaria(), h=await hashSenha(senha), agora=new Date().toISOString(), por=S.auth.user?.nome||"Administrador";
+      const res=await supaCriarConta(u.email, senha);
+      if(res==="liberado"){ await salvarUsuario({...u, ativo:true, temp:{sal:h.sal,hash:h.hash,em:agora}, historico:[...(u.historico||[]), {em:agora, acao:`Acesso liberado com senha temporária nova por ${por}`}]});
+        S.usrSenha={titulo:`Acesso de ${u.nome} liberado.`, nome:u.nome, email:u.email, senha}; toast("Acesso liberado com senha temporária nova."); return; }
+      if(res==="bloqueado"){ S._confEmail=true; S.usrSenha={titulo:`Não foi possível liberar ${u.nome}`, nome:u.nome, email:u.email, senha:null, alerta:"O Supabase ainda exige confirmação de e-mail (\"Confirm email\" ligado). Desligue em Authentication → Sign In / Providers → Email e clique em Resetar senha de novo."}; toast("Login continua bloqueado: veja o aviso."); return; }
+      // login já existe e está ativo: link por e-mail (só chega com servidor de e-mail configurado no Supabase)
+      const {error}=await S.sb.auth.resetPasswordForEmail(u.email,{redirectTo:supaVoltar()});
+      S.usrSenha={titulo:`${u.nome} já tem login ativo`, nome:u.nome, email:u.email, senha:null, alerta:(error?"O Supabase não enviou o e-mail de nova senha. ":"Enviamos o link de nova senha, mas ele só chega se o Supabase tiver servidor de e-mail (SMTP) configurado. ")+"Se a pessoa não receber: Supabase → Authentication → Users → abra o usuário → defina uma senha nova (ou apague e use Resetar senha aqui)."};
+      toast("Veja as instruções no aviso."); }); }
   else if(a==="usrreset" && u){ usrAcao(async()=>{ const senha=senhaTemporaria(), h=await hashSenha(senha), agora=new Date().toISOString(), por=S.auth.user?.nome||"Suprimentos";
       await salvarUsuario({...u, temp:{sal:h.sal,hash:h.hash,em:agora}, historico:[...(u.historico||[]), {em:agora, acao:`Senha resetada por ${por}`}]});
       S.usrSenha={titulo:`Senha de ${u.nome} resetada.`, nome:u.nome, email:u.email, senha}; toast("Senha resetada."); }); }
