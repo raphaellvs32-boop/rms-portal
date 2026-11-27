@@ -679,6 +679,15 @@ const pendentesOf = r => (r.itens||[]).map((_,i)=>i).filter(i=>!almoxEst(r,i) &&
 /* item sem PR no Diligenciamento: só visualização até Suprimentos informar a PR (nota 068) */
 const itemSemPrTrava = (r,i,x) => !almoxEst(r,i) && itemPrIdx(r,i)<0 && !String((x||{}).pedido||"").trim();
 const temPendente = r => prsOf(r).length>0 && pendentesOf(r).length>0 && !isNeg(r.id) && !isFinal(r.id);
+/* Produtividade (nota 094): a PR só conta no Painel do Gestor se estiver completa — nº da PR válido (só números, 6 a 12 dígitos),
+   data da PR (não futura) e, em todos os itens da PR, tipo de compra e grupo de compras. Salvar só uma observação não conta. */
+const PR_NUM_OK = v => /^\d{6,12}$/.test(String(v||"").trim());
+function prFaltas(sx, p){ const f=[]; if(!PR_NUM_OK(p.pr)) f.push("nº da PR válido (só números, 6 a 12 dígitos)");
+  const d=String(p.data||""); if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) f.push("data da PR"); else if(d>today()) f.push("data da PR (não pode ser futura)");
+  const its=p.itens||[], tr=sx.itensTrat||[]; const semTc=its.filter(i=>!String((tr[i]||{}).tipoCompra||"").trim()), semGp=its.filter(i=>!String((tr[i]||{}).grupo||"").trim());
+  if(!its.length) f.push("itens da PR"); if(semTc.length) f.push(`tipo de compra (item ${semTc.map(i=>i+1).join(", ")})`); if(semGp.length) f.push(`grupo de compras (item ${semGp.map(i=>i+1).join(", ")})`);
+  return f; }
+const prCompleta = (sx, p) => !prFaltas(sx, p).length;
 const prsSync = prs => { const a=prs[0]||{}; return {prs, rcPr:a.pr||"", dataRcPr:a.data||"", rcNum:a.rc||"", dataAprovPr:a.aprov||""}; };
 const diasGerentePr = p => !p.data ? null : p.aprov ? dDiff(p.data, p.aprov) : dDiff(p.data, today());
 const prBloq = r => prsOf(r).some(p=>!p.aprov);
@@ -2560,7 +2569,10 @@ function gesGrafico(prod, meses, comps){
    <div class="leg3" style="margin-top:6px">${comps.map(c=>`<span><i style="background:${c.cor}"></i>${esc(c.nome)}</span>`).join("")}</div>`;
 }
 function viewGestor(){
-  const meses=gesMeses(6), mes=S.gesMes||meses[meses.length-1], prod=S.producao||[], ses=S.sessoes||[];
+  const meses=gesMeses(6), mes=S.gesMes||meses[meses.length-1], ses=S.sessoes||[];
+  /* só conta a PR que continua na RMS e está completa (nota 094): PR apagada, corrigida ou sem dados não entra */
+  const prodOk=x=>{ const r=S.rms.find(z=>z.id===x.rms); if(!r) return false; const p=prsOf(r).find(z=>z.pr===x.pr); return !!p && prCompleta(S.status[r.id]||{}, p); };
+  const prodAll=S.producao||[], prod=prodAll.filter(prodOk), naoConta=prodAll.filter(x=>String(x.em).slice(0,7)===mes && !prodOk(x)).length;
   const nomes={}; [...prod,...ses].forEach(x=>{ if(x.uid) nomes[x.uid]=x.nome||x.email||"Comprador"; });
   const comps=Object.keys(nomes).sort((a,b)=>nomes[a].localeCompare(nomes[b])).map((uid,i)=>({uid,nome:nomes[uid],cor:GES_CORES[i%GES_CORES.length]}));
   const pm=prod.filter(x=>String(x.em).slice(0,7)===mes), sm=ses.filter(x=>String(x.inicio).slice(0,7)===mes);
@@ -2576,12 +2588,12 @@ function viewGestor(){
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Mês <select class="in" id="gesMes" style="width:auto">${[...meses].reverse().map(m=>`<option value="${m}" ${m===mes?"selected":""}>${mesNome(m)}</option>`).join("")}</select></label>
     <button class="btn" data-act="gessair">Bloquear painel</button></div></div>
   <div class="bento" style="grid-template-columns:repeat(4,minmax(0,1fr))">
-    ${kp("RMS processadas no mês",pm.length,"PRs criadas pelos compradores")}
+    ${kp("RMS processadas no mês",pm.length,naoConta?`${naoConta} PR(s) incompleta(s) não contam`:"só PR completa conta")}
     ${kp("Tempo de tela por RMS",fmtDur(telaAll.length?telaAll.reduce((a,b)=>a+b,0)/telaAll.length:null),"média, RMS aberta até criar a PR")}
     ${kp("Chegada → PR",fdN(avgN(chAll)),"média em dias úteis")}
     ${kp("RMS abertas agora",abertas.length,abertas.length?`a mais longa há ${fmtDur(abertas[0].ms)}`:"nenhuma em tratamento")}
   </div>
-  <section class="panel"><header><h3>RMS processadas por comprador</h3><span class="sub" style="margin:0">últimos 6 meses · PR criada = RMS processada</span></header><div class="body">${gesGrafico(prod,meses,comps)}</div></section>
+  <section class="panel"><header><h3>RMS processadas por comprador</h3><span class="sub" style="margin:0">últimos 6 meses · conta só PR completa: nº, data, tipo de compra e grupo</span></header><div class="body">${gesGrafico(prod,meses,comps)}</div></section>
   <section class="panel"><header><h3>Produtividade em ${mesNome(mes)}</h3><span class="sub" style="margin:0">tempo de tela = período com a RMS aberta no portal</span></header>
    ${linhas.length?`<div class="tw"><table><thead><tr><th>Comprador</th><th class="r">RMS processadas</th><th class="r">Tempo de tela por RMS</th><th class="r">Chegada → PR</th><th class="r">Sessões</th><th class="r">Tempo total de tela</th><th class="r">Maior sessão</th></tr></thead><tbody>
     ${linhas.map(l=>`<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${l.cor};margin-right:8px"></span><strong>${esc(l.nome)}</strong></td><td class="num r"><strong>${l.n}</strong></td><td class="num r">${fmtDur(l.tela)}</td><td class="num r">${fdN(l.cheg)}</td><td class="num r">${l.sess}</td><td class="num r">${fmtDur(l.total)}</td><td class="r">${l.maior!=null?`<span class="farol f-${farolSes(l.maior)}"><i></i>${fmtDur(l.maior)}</span>`:"—"}</td></tr>`).join("")}
@@ -2592,7 +2604,7 @@ function viewGestor(){
   <section class="panel"><header><h3>Sessões mais longas em ${mesNome(mes)}</h3><span class="sub" style="margin:0">${longas.length} sessão(ões)</span></header>
    ${longas.length?`<div class="tw"><table><thead><tr><th>Comprador</th><th>RMS</th><th>Início</th><th>Como terminou</th><th class="r">Duração</th></tr></thead><tbody>${pgL.items.map(x=>{ const d=durSes(x); return `<tr class="click" data-act="open" data-id="${esc(x.rms)}"><td>${esc(x.nome||"—")}</td><td class="num">${esc(fmtNum(x.rms))}</td><td class="num">${fmtDT(x.inicio)}</td><td>${x.fechada?(x.fechadaPor==="administrador"?"Liberada pelo admin":"Salvou ou fechou"):(abertas.some(a=>a.rid===x.rms)?"Ainda aberta":"Navegador fechado")}</td><td class="r"><span class="farol f-${farolSes(d)}"><i></i>${fmtDur(d)}</span></td></tr>`; }).join("")}</tbody></table></div>${pgL.html}`:`<div class="empty">Nenhuma sessão registrada em ${mesNome(mes)}.</div>`}</section>
   </div>
-  <p class="sub">Farol das sessões: verde até 30 min · amarelo até 2 h · vermelho acima de 2 h. Os registros são gravados pelo próprio banco (abrir, renovar a cada minuto, fechar) e não podem ser alterados pelos compradores. Contagem a partir da implantação do painel.</p>
+  <p class="sub">Farol das sessões: verde até 30 min · amarelo até 2 h · vermelho acima de 2 h. Os registros são gravados pelo próprio banco (abrir, renovar a cada minuto, fechar) e não podem ser alterados pelos compradores. Contagem a partir da implantação do painel.<br><strong>Regra de contagem:</strong> a RMS só conta como processada quando a PR é salva completa: nº da PR (só números, 6 a 12 dígitos), data da PR e, em todos os itens da PR, tipo de compra e grupo de compras. Abrir a RMS e salvar só uma observação (ou um ponto) não conta. PR apagada ou corrigida deixa de contar.</p>
   ${S.supa?"":`<div class="note warn">Modo local: o Painel do Gestor só tem dados na base compartilhada (nuvem).</div>`}`;
 }
 document.addEventListener("change",ev=>{ if(ev.target.id==="gesMes"){ S.gesMes=ev.target.value; render(); } });
@@ -2859,6 +2871,11 @@ async function tratSalvar(id, t){
   (r.itens||[]).forEach((_,i)=>comp.push(almoxEst(r,i) || prsNov.some(p=>(p.itens||[]).includes(i)) || (pedidosOf(r).length>0 && !!(cur.comprados||[])[i])));
   extra.itensTrat=trat; extra.comprados=comp; Object.assign(extra, prsSync(prsNov));
   extra.tipoCompra=predom(trat.map(x=>x.tipoCompra)); const gp=predom(trat.map(x=>x.grupo?`${x.grupo}|${x.comprador}`:"")).split("|"); extra.grupo=gp[0]||""; extra.comprador=gp[1]||"";
+  { const sxN={...cur, itensTrat:trat};   // PR completa (nota 094): nova/alterada confere tudo; as já existentes não podem perder tipo/grupo
+    for(let q=0;q<prsNov.length;q++){ const p=prsNov[q], igual=prsAnt.some(x=>x.pr===p.pr&&(x.data||"")===(p.data||""));
+      const fx=prFaltas(sxN,p).filter(t=>!igual||/^(tipo|grupo)/.test(t)); if(!fx.length) continue;
+      const el=p.pr===rc?$("#rc-"+E):$(`#prn-${E}-${prsAnt.findIndex(x=>x.itens===p.itens)}`); el?.classList.add("err"); el?.focus();
+      toast(`PR ${p.pr}: falta preencher ${fx.join(", ")}. A RMS só conta como processada com a PR completa.`); return; } }
   if(codCh.length) parts.push(`Código do material atualizado em ${codCh.length} item(ns)`);
   if(trCh) parts.push(`Tipo de compra / grupo atualizados em ${trCh} item(ns)`);
   parts.push(...prParts);
