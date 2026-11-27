@@ -236,6 +236,18 @@ textarea.in{resize:vertical;min-height:38px}
 .overlay{position:fixed;inset:0;background:color-mix(in srgb,#000 45%,transparent);z-index:20;display:flex;justify-content:flex-end}
 .drawer{background:var(--bg);width:100%;height:100%;overflow:auto;padding-block:max(20px,env(safe-area-inset-top,0px)) max(24px,env(safe-area-inset-bottom,0px));padding-left:20px;padding-right:max(20px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
 .drawer>*{flex:none;width:100%;max-width:1240px;margin-inline:auto}
+/* Tela de tratamento em abas (nota 098) */
+.drsum{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+.drsum .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-bottom:4px}
+.drsum .v{font-weight:700;font-size:13.5px;overflow-wrap:anywhere}
+.drtabs{display:flex;gap:2px;border-bottom:2px solid var(--line);overflow-x:auto;scrollbar-width:thin}
+.drtabs button{background:none;border:0;border-bottom:3px solid transparent;margin-bottom:-2px;padding:10px 16px;font:inherit;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap}
+.drtabs button[aria-selected=true]{color:#4F7A00;border-bottom-color:#84BD00}
+.drtabs button:hover{color:var(--fg)}
+.drtabs em{font-style:normal;background:var(--line);border-radius:999px;padding:0 7px;font-size:11px;margin-left:6px;color:var(--fg)}
+.drpane{display:flex;flex-direction:column;gap:16px}
+.drpane[hidden]{display:none}
+@media (max-width:900px){.drsum{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .doc{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .doc-h{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:16px 18px;border-bottom:2px solid var(--fg)}
 .doc-h h3{margin:0;font-size:16px;letter-spacing:.04em}
@@ -2733,9 +2745,6 @@ function tratamentoBox(r){
       <label class="f">Data da PR<input class="in" type="date" id="dt-${id}" value=""></label>
       <div class="f pcol" style="grid-column:span 2"><span>&nbsp;</span><span class="sub" style="margin:0;padding-top:4px;font-family:var(--sans);text-transform:none;letter-spacing:0">${prsOf(r).length?"Marque na tabela os itens desta PR (coluna PR). Sem marcar, ela vale para todos os itens pendentes.":"Vale para os itens marcados na coluna PR. Sem marcar, vale para todos os itens."} A data é preenchida sozinha ao digitar o número.</span></div></div>`:""}</div>
    </div>
-   <div class="body grid g4" style="border-top:1px solid var(--line)">
-    <label class="f">Projeto<input class="in" id="pj-${id}" value="${esc(projOf(r))}" readonly disabled title="Informado pelo solicitante na RMS. Para mudar, o solicitante usa Editar RMS." style="background:var(--surface-2);color:var(--fg);cursor:not-allowed"></label>
-   </div>
    <div class="body" style="border-top:1px solid var(--line)"><div class="sec-t">Itens · código SAP, tipo de compra, grupo de compras e comprado</div>
     <div class="tw"><table class="codtab trtab"><thead>
      <tr><th style="width:48px">Item</th><th style="width:96px" class="r">Qtd</th><th>Descrição (não editável)</th><th style="width:150px">Código SAP</th><th style="width:150px">Tipo de compra</th><th style="width:210px">Grupo de compras</th><th style="width:150px">PR</th></tr>
@@ -2957,6 +2966,36 @@ function renderNotif(){
       <div class="ntxt">${esc(n.texto||"")}</div><div class="sub">${fmtDT(n.em)}</div></div><button class="btn small" data-act="notifver" data-id="${esc(n.rid)}" data-n="${esc(n.id)}">${n.tipo==="revisao"?"Revisar":"Ver RMS"}</button></div>`).join("")}</div>
     <div class="actions"><button class="btn primary" data-act="notifok">Entendi</button></div></div></div>`;
 }
+/* Tela de tratamento em abas (nota 098): cabeçalho com o essencial + uma aba por assunto.
+   As abas só escondem/mostram (não redesenham), para não perder o que o comprador já digitou. */
+const DR_ABAS=[["trat","Tratamento"],["pedido","Pedido do solicitante"],["anexos","Anexos"],["dilig","Diligenciamento"],["hist","Histórico"]];
+function supAbas(r, docHtml, hist){
+  const sx=S.status[r.id]||{}, P=prsOf(r), dg=diasGerente(r), nAnx=(r.anexos||[]).length;
+  if(S.drTabId!==r.id){ S.drTabId=r.id; S.drTab="trat"; }
+  const tab=DR_ABAS.some(([k])=>k===S.drTab)?S.drTab:"trat";
+  const elem=r.elemento||[...new Set((r.itens||[]).map(i=>i.elemento).filter(Boolean))].join(", ")||"—";
+  const kv=(k,v)=>`<div><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  const cont={anexos:nAnx, hist:hist.length};
+  const anexos=nAnx?`<section class="panel"><header><h3>Anexos (${nAnx})</h3></header><div class="body"><div class="files" style="margin:0">${r.anexos.map((a,ai)=>`<div class="file"><span class="chip">${esc(extOf(a.nome))}</span>${/^(db|local):/.test(a.id)?`<button class="btn link nm" style="text-align:left;padding:0" data-act="getanx" data-id="${esc(r.id)}" data-i="${ai}">${esc(a.nome)}</button>`:`<a class="nm" href="/_blob/${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${esc(a.nome)}</a>`}<span class="sz">${fmtSize(a.tamanho)}</span></div>`).join("")}</div></div></section>`:`<div class="empty">Nenhum anexo nesta RMS.</div>`;
+  const pane=(k,html)=>`<div class="drpane" role="tabpanel" id="drp-${k}" aria-labelledby="drt-${k}" ${k===tab?"":"hidden"}>${html}</div>`;
+  return `<div class="drsum">
+    ${kv("Prioridade",prChip(r))}
+    ${kv("Necessidade",`<span class="num">${fmtD(necOf(r))}</span>`)}
+    ${kv("Projeto · Elemento",`${esc(projOf(r))} · <span class="num">${esc(elem)}</span>`)}
+    ${kv("PR",P.length?`<span class="num">${esc(P[0].pr)}${P[0].data?" · "+fmtD(P[0].data).slice(0,5):""}</span>${P.length>1?` <span class="sub" style="display:inline;margin:0">+${P.length-1}</span>`:""}`:`<span style="color:var(--muted)">sem PR</span>`)}
+    ${kv("RC",sx.rcNum?`<span class="num">${esc(sx.rcNum)}</span>`:prBloq(r)?`<span style="color:var(--muted)">aguardando gerente</span>`:"—")}
+    ${kv("Com o gerente",P.length?farolGerTxt(dg):"—")}
+  </div>
+  <div class="drtabs" role="tablist" aria-label="Seções da RMS">${DR_ABAS.map(([k,l])=>`<button type="button" role="tab" id="drt-${k}" aria-controls="drp-${k}" aria-selected="${k===tab}" data-act="drtab" data-k="${k}">${l}${cont[k]?`<em>${cont[k]}</em>`:""}</button>`).join("")}</div>
+  ${pane("trat", almoxInfo(r)+tratamentoBox(r))}
+  ${pane("pedido", docHtml+(S.justSent!==r.id&&(r.criadoPor===S.uid||S.mode==="local")&&!isFinal(r.id)?avisoBox(r):""))}
+  ${pane("anexos", anexos)}
+  ${pane("dilig", diligBox(r))}
+  ${pane("hist", `<section class="panel"><header><h3>Histórico e log de alterações</h3><span class="hsub">${hist.length} registro(s)</span></header><div class="body"><ul class="timeline">${hist.map(h=>`<li><time>${fmtDT(h.em)}</time><span>${h.html}</span></li>`).join("")}</ul></div></section>`)}`;
+}
+function drTab(k){ S.drTab=k;
+  document.querySelectorAll("#overlayRoot [data-act=drtab]").forEach(b=>b.setAttribute("aria-selected", b.dataset.k===k));
+  document.querySelectorAll("#overlayRoot .drpane").forEach(p=>p.hidden=p.id!=="drp-"+k); }
 function renderDrawer(){
   setTimeout(syncTrava,0);
   const root=$("#overlayRoot"); const r=S.rms.find(x=>x.id===S.openId);
@@ -2969,20 +3008,7 @@ function renderDrawer(){
   const podeEditar=["analise","revisao","almox"].includes(stOf(r.id)) && (r.criadoPor===S.uid || S.mode==="local");
   const logEv=(r.log||[]).map(l=>({em:l.em, html:`<strong>RMS editada por ${esc(l.por||"solicitante")}</strong><ul class="loglist">${(l.alteracoes||[]).map(a=>`<li><span class="lc">${esc(a.campo)}:</span> <del>${esc(a.de||"(vazio)")}</del> → <ins>${esc(a.para||"(vazio)")}</ins></li>`).join("")}</ul>`}));
   const hist=[{em:r.criadoEm, html:`RMS emitida por ${esc(r.solicitante?.nome)} · Em análise`}, ...(r.encaminhadoEm?[{em:r.encaminhadoEm, html:"Encaminhada aos compradores por e-mail"}]:[]), ...(sx.historico||[]).map(h=>({em:h.em, html:esc(h.evento)})), ...logEv].sort((a,b)=>String(a.em).localeCompare(String(b.em)));
-  root.innerHTML=`<div class="overlay" data-act="close"><div class="drawer" role="dialog" aria-modal="true" aria-label="RMS ${esc(fmtNum(r.id))}">
-    <div class="head"><div><h2>RMS ${esc(fmtNum(r.id))}</h2><p>Emitida em ${fmtDT(r.criadoEm)}</p></div>
-      <div style="display:flex;gap:8px;align-items:center">${pillOf(r)}<span class="chip">${diasCell(r).replace(/<div.*<\/div>/,"")}</span>${podeEditar&&!supCtx?`<button class="btn primary" data-act="editrms" data-id="${esc(r.id)}">✎ Editar RMS</button>`:""}<button class="btn" data-act="close">Fechar</button></div></div>
-    ${trilha(r)}
-    ${!supCtx?`<div class="rolabel">Visualização somente leitura${!podeEditar&&!isFinal(r.id)&&(r.criadoPor===S.uid||S.mode==="local")?" · a edição só é permitida enquanto a RMS está Em análise":""}${podeEditar?" · use <strong>Editar RMS</strong> para alterar; cada alteração fica registrada no histórico":""}${(r.log||[]).length?` · editada ${(r.log||[]).length} vez(es)`:""}</div>`:""}
-    ${S.justSent===r.id?avisoBox(r):""}
-    ${almCtx?almoxBox(r):supCtx?tratamentoBox(r):""}
-    ${!almCtx?almoxInfo(r):""}
-    ${stOf(r.id)==="revisao"?`<div class="revbox"><strong>Devolvida para revisão por Suprimentos em ${fmtDT(sx.revisao?.em)}</strong><div class="revmsg">${esc(sx.revisao?.msg||"")}</div>${podeEditar&&!supCtx?`<div style="margin-top:8px"><button class="btn primary small" data-act="editrms" data-id="${esc(r.id)}">✎ Revisar e reenviar</button></div>`:""}</div>`:""}
-    ${r.reenviadoEm && sx.revisao && r.reenviadoEm>sx.revisao.em && supCtx?`<div class="okbox"><div><strong>Reenviada pelo solicitante em ${fmtDT(r.reenviadoEm)}</strong> após a revisão. Veja as alterações no log abaixo.</div></div>`:""}
-    ${isNeg(r.id)?`<div class="errors" style="${stOf(r.id)==="cancelado"?"background:var(--surface-2);color:var(--fg);border:1px solid var(--line)":""}"><strong>Status: ${esc(STATUS[stOf(r.id)].label)} em ${fmtDT(sx.concluidoEm)}.</strong><div style="margin-top:4px">Motivo: ${esc(sx.motivo||"não informado")}</div></div>`:""}
-    <div class="panel" hidden><div class="body" style="display:grid;grid-template-columns:repeat(${steps.length},minmax(0,1fr));gap:8px">
-      ${steps.map((k,i)=>`<div style="border-top:4px solid ${i<=cur?"var(--accent)":"var(--line)"};padding-top:8px"><strong style="font-size:13px">${STATUS[k].label}</strong><div style="font-size:12px;color:var(--muted)">${i<cur?"Etapa concluída":i===cur?"Etapa atual":"Pendente"}</div></div>`).join("")}
-    </div></div>
+  const docHtml=`
     <article class="doc">
       <div class="doc-h"><div><h3>REQUISIÇÃO DE MATERIAIS OU SERVIÇOS</h3><div style="font-size:12px;color:var(--muted)">Formulário de RMS · Rev.02</div></div>
         <div class="doc-no"><div class="k">nº RMS</div><div class="v">${esc(fmtNum(r.id))}</div></div></div>
@@ -3004,7 +3030,7 @@ function renderDrawer(){
       </tbody></table></div>
       <div class="body" style="border-top:1px solid var(--line);display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:13px">
         <strong>${bb.k} de ${bb.n} ${bb.n===1?"item comprado":"itens comprados"}</strong>
-        <span style="color:var(--muted)">${bb.all?"Todos os itens foram comprados. RMS concluída.":bb.parcial?"Compra parcial: a RMS continua pendente e os dias em aberto seguem contando até o último item.":supCtx?"Marque Comprado (Sim/Não) na tabela do Tratamento, acima, e salve.":"Suprimentos marca cada item conforme a compra é feita."}</span></div>
+        <span style="color:var(--muted)">${bb.all?"Todos os itens foram comprados. RMS concluída.":bb.parcial?"Compra parcial: a RMS continua pendente e os dias em aberto seguem contando até o último item.":supCtx?"Marque Comprado (Sim/Não) na aba Tratamento e salve.":"Suprimentos marca cada item conforme a compra é feita."}</span></div>
       <div class="sign">
         <div><div class="sec-t">Solicitante</div>${esc(r.solicitante?.nome)} · <span class="num">${esc(r.solicitante?.matricula)}</span><div style="font-size:12px;color:var(--muted)">${fmtD(r.dataRms)}</div></div>
         ${r.superior?.nome?`<div><div class="sec-t">Superior imediato</div>${esc(r.superior.nome)} · <span class="num">${esc(r.superior.matricula)}</span><div style="font-size:12px;color:var(--muted)">${esc(r.superior.cargo||"")}</div></div>`:"<div></div>"}
@@ -3012,11 +3038,26 @@ function renderDrawer(){
       ${(r.infoComp||r.obs)?`<div class="body" style="border-top:1px solid var(--line)"><div class="sec-t">Informações Complementares</div><div style="white-space:pre-wrap">${esc(r.infoComp||r.obs)}</div></div>`:""}
       ${(r.anexos||[]).length?`<div class="body" style="border-top:1px solid var(--line)"><div class="sec-t">Anexos (${r.anexos.length})</div><div class="files" style="margin:0">${r.anexos.map((a,ai)=>`<div class="file"><span class="chip">${esc(extOf(a.nome))}</span>${/^(db|local):/.test(a.id)?`<button class="btn link nm" style="text-align:left;padding:0" data-act="getanx" data-id="${esc(r.id)}" data-i="${ai}">${esc(a.nome)}</button>`:`<a class="nm" href="/_blob/${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${esc(a.nome)}</a>`}<span class="sz">${fmtSize(a.tamanho)}</span></div>`).join("")}</div></div>`:""}
     </article>
-    ${S.justSent!==r.id&&(r.criadoPor===S.uid||S.mode==="local")&&!isFinal(r.id)?avisoBox(r):""}
-    ${supCtx?diligBox(r):""}
-    <section class="panel"><header><h3>Histórico e log de alterações</h3><span class="hsub">${hist.length} registro(s)</span></header><div class="body"><ul class="timeline">
+`;
+  root.innerHTML=`<div class="overlay" data-act="close"><div class="drawer" role="dialog" aria-modal="true" aria-label="RMS ${esc(fmtNum(r.id))}">
+    <div class="head"><div><h2>RMS ${esc(fmtNum(r.id))}</h2><p>Emitida em ${fmtDT(r.criadoEm)}</p></div>
+      <div style="display:flex;gap:8px;align-items:center">${pillOf(r)}<span class="chip">${diasCell(r).replace(/<div.*<\/div>/,"")}</span>${podeEditar&&!supCtx?`<button class="btn primary" data-act="editrms" data-id="${esc(r.id)}">✎ Editar RMS</button>`:""}<button class="btn" data-act="close">Fechar</button></div></div>
+    ${trilha(r)}
+    ${!supCtx?`<div class="rolabel">Visualização somente leitura${!podeEditar&&!isFinal(r.id)&&(r.criadoPor===S.uid||S.mode==="local")?" · a edição só é permitida enquanto a RMS está Em análise":""}${podeEditar?" · use <strong>Editar RMS</strong> para alterar; cada alteração fica registrada no histórico":""}${(r.log||[]).length?` · editada ${(r.log||[]).length} vez(es)`:""}</div>`:""}
+    ${S.justSent===r.id?avisoBox(r):""}
+    ${almCtx?almoxBox(r):""}
+    ${!almCtx&&!supCtx?almoxInfo(r):""}
+    ${stOf(r.id)==="revisao"?`<div class="revbox"><strong>Devolvida para revisão por Suprimentos em ${fmtDT(sx.revisao?.em)}</strong><div class="revmsg">${esc(sx.revisao?.msg||"")}</div>${podeEditar&&!supCtx?`<div style="margin-top:8px"><button class="btn primary small" data-act="editrms" data-id="${esc(r.id)}">✎ Revisar e reenviar</button></div>`:""}</div>`:""}
+    ${r.reenviadoEm && sx.revisao && r.reenviadoEm>sx.revisao.em && supCtx?`<div class="okbox"><div><strong>Reenviada pelo solicitante em ${fmtDT(r.reenviadoEm)}</strong> após a revisão. Veja as alterações no log abaixo.</div></div>`:""}
+    ${isNeg(r.id)?`<div class="errors" style="${stOf(r.id)==="cancelado"?"background:var(--surface-2);color:var(--fg);border:1px solid var(--line)":""}"><strong>Status: ${esc(STATUS[stOf(r.id)].label)} em ${fmtDT(sx.concluidoEm)}.</strong><div style="margin-top:4px">Motivo: ${esc(sx.motivo||"não informado")}</div></div>`:""}
+    <div class="panel" hidden><div class="body" style="display:grid;grid-template-columns:repeat(${steps.length},minmax(0,1fr));gap:8px">
+      ${steps.map((k,i)=>`<div style="border-top:4px solid ${i<=cur?"var(--accent)":"var(--line)"};padding-top:8px"><strong style="font-size:13px">${STATUS[k].label}</strong><div style="font-size:12px;color:var(--muted)">${i<cur?"Etapa concluída":i===cur?"Etapa atual":"Pendente"}</div></div>`).join("")}
+    </div></div>
+    ${supCtx?supAbas(r,docHtml,hist):docHtml}
+    ${!supCtx&&S.justSent!==r.id&&(r.criadoPor===S.uid||S.mode==="local")&&!isFinal(r.id)?avisoBox(r):""}
+    ${supCtx?"":`<section class="panel"><header><h3>Histórico e log de alterações</h3><span class="hsub">${hist.length} registro(s)</span></header><div class="body"><ul class="timeline">
       ${hist.map(h=>`<li><time>${fmtDT(h.em)}</time><span>${h.html}</span></li>`).join("")}
-    </ul></div></section>
+    </ul></div></section>`}
     ${almEd?almoxFooter(r):supCtx?tratFooter(r):""}
   </div></div>`;
   if(supCtx && !travaDe(r.id)) tfUpdate(r.id);
@@ -3026,7 +3067,7 @@ function renderDrawer(){
 /* ---------- Perfil Consulta: só visualização (nota 082) ----------
    Ações liberadas: navegar, filtrar, ordenar, abrir/fechar, copiar, exportar. Todo o resto é barrado aqui
    (e também no banco, pela regra do Supabase). */
-const CONSULTA_OK=new Set(["bell","bellver","pushpainel","pushfechar","pushativ","pushdesl","pushteste","open","close","okclose","dilclose","almtab","bell","clear","colall","colclose","colf","colnone","colx","colxall","copy","dilf","dsort","filter","indclear","indgo","indpdf","indper","ini","iniopen","kfilter","lgsair","lgver","ltinv","ltmed","ltsel","minf","notifok","notifver","pg","snall","snok","snopen","supf","xlsx"]);
+const CONSULTA_OK=new Set(["drtab","bell","bellver","pushpainel","pushfechar","pushativ","pushdesl","pushteste","open","close","okclose","dilclose","almtab","bell","clear","colall","colclose","colf","colnone","colx","colxall","copy","dilf","dsort","filter","indclear","indgo","indpdf","indper","ini","iniopen","kfilter","lgsair","lgver","ltinv","ltmed","ltsel","minf","notifok","notifver","pg","snall","snok","snopen","supf","xlsx"]);
 document.addEventListener("click",ev=>{
   if(!S.consulta) return; const t=ev.target.closest("[data-act]"); if(!t) return;
   if(CONSULTA_OK.has(t.dataset.act)) return;
@@ -3041,6 +3082,7 @@ document.addEventListener("click",async ev=>{
   const a=t.dataset.act;
   if(a==="close" && t.classList.contains("overlay") && ev.target!==t) return;
   if(a==="open"){ S.openId=t.dataset.id; renderDrawer(); }
+  else if(a==="drtab"){ drTab(t.dataset.k); }
   else if(a==="okclose"){ S.lastSent=null; render(); }
   else if(a==="avisar"){ S.justSent=t.dataset.id; S.openId=t.dataset.id; renderDrawer(); }
   else if(a==="close"){ S.openId=null; S.justSent=null; renderDrawer(); }
