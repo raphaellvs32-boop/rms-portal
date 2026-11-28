@@ -192,6 +192,16 @@ tbody tr:last-child td{border-bottom:none}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap}
 .seg button{border:none;background:var(--surface);padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--muted)}
 .seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--fg)}
+/* Ordem dos filtros por pessoa (nota 100) */
+.segwrap{display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:100%}
+.segord button[draggable=true]{cursor:grab}
+.segord button.arrastando{opacity:.4}
+.segord button.alvo{box-shadow:inset 3px 0 0 #0891B2}
+.segord.ed{outline:2px dashed #0891B2;outline-offset:2px}
+.segord.ed button{cursor:default}
+.segord .om{display:inline-grid;place-items:center;width:20px;height:20px;margin:0 4px;border-radius:5px;background:#ecfeff;color:#0E7490;font-size:11px;cursor:pointer}
+.segord .om:hover{background:#0891B2;color:#fff}
+.btn.ordbtn{padding:5px 10px;font-size:12px}
 .search{border:1px solid var(--line);border-radius:8px;padding:7px 12px;background:var(--surface);min-width:0;width:220px;max-width:100%}
 
 /* Formulário */
@@ -753,6 +763,7 @@ async function boot(){
   S.db=db;
   window.claude.use("assets").then(a=>{ S.assets=a; if(S.view==="nova") softRender(); }).catch(()=>{});
   if(user){ try{ S.uid=await user.id(); S.canSup=!!(await user.canEdit()); S.claudeSup=S.canSup; }catch{} }
+  if(S.uid) try{ db.doc(`data/users/${S.uid}/prefs`).onSnapshot(d=>{ const o=d.exists&&d.data().ordem; if(o&&typeof o==="object"){ ordemCarregar(); S.ordem=o; try{ localStorage.setItem(LS_KEY+"-ordem-"+S.ordemUid, JSON.stringify(o)); }catch{} softRender(); } }, ()=>{}); }catch{}
   if(S.uid) try{ db.doc(`data/users/${S.uid}/notif`).onSnapshot(d=>{ S.vistos=new Set((d.exists&&d.data().vistos)||[]); S.supDesde=(d.exists&&d.data().supDesde)||S.supDesde||null; S.vistosOk=true; softRender(); }, ()=>{ S.vistosOk=true; }); }catch{ S.vistosOk=true; }
   let gotR=false,gotS=false;
   const ready=()=>{ if(gotR&&gotS&&S.mode!=="db"){ clearTimeout(timer); S.mode="db"; setConn(); iniciarLogin(); } softRender(); };
@@ -960,9 +971,7 @@ function viewSup(){
   S._supBase=l; const lf=colAplicar(l);
   const pg=paginar("sup", lf, S.supFilter+"|"+JSON.stringify(S.supCol));
   return `<div class="head"><div><h2>Fila de compras</h2><p>Clique na RMS para abrir em tela cheia: informe o nº da PR, o grupo de compras, o tipo de compra, marque os itens comprados e atualize o status. O solicitante vê a mudança na hora.</p></div></div>
-  <section class="panel"><header><div class="seg" role="group" aria-label="Fila">
-    ${[["analise",`Em análise (${c.analise})`],["atendimento",`Em compra (${c.atendimento})`],["pedido",`Pedido emitido (${c.pedido})`],["parcial",`Entrega parcial (${c.parcial})`],["concluida",`Entregue (${c.concluida})`],["cancelado",`Cancelado (${c.cancelado})`],["recusado",`Recusado (${c.recusado})`],["revisao",`Em revisão (${c.revisao})`],["pend",`Itens sem PR (${nPend})`],["spot",`Spot em aberto (${nSpot})`],["todas",`Todas (${c.total})`]].map(([k,t])=>`<button data-act="supf" data-f="${k}" aria-pressed="${S.supFilter===k}">${t}</button>`).join("")}
-  </div>${S.supFilter==="spot"?spotLegenda():farolLegenda()}</header>
+  <section class="panel"><header>${segOrd("sup",[["analise",`Em análise (${c.analise})`],["atendimento",`Em compra (${c.atendimento})`],["pedido",`Pedido emitido (${c.pedido})`],["parcial",`Entrega parcial (${c.parcial})`],["concluida",`Entregue (${c.concluida})`],["cancelado",`Cancelado (${c.cancelado})`],["recusado",`Recusado (${c.recusado})`],["revisao",`Em revisão (${c.revisao})`],["pend",`Itens sem PR (${nPend})`],["spot",`Spot em aberto (${nSpot})`],["todas",`Todas (${c.total})`]],"supf",S.supFilter,"Fila")}${S.supFilter==="spot"?spotLegenda():farolLegenda()}</header>
   ${colChips()}
   ${loadingOr(!l.length?`<div class="empty">Nenhuma RMS nesta fila.</div>`:`<div class="tw"><table><thead><tr>${SUP_COLS.map(colTh).join("")}</tr></thead><tbody>
   ${!lf.length?`<tr><td colspan="${SUP_COLS.length}"><div class="empty">Nenhuma RMS com esses filtros. <button class="btn small" data-act="colxall">Limpar filtros</button></div></td></tr>`:""}
@@ -1028,6 +1037,28 @@ function leadTime(r){
   if(!de || !sx.dataRcPr) return null;
   return diasUteis(sx.dataRcPr, de);
 }
+/* Ordem dos filtros por pessoa (nota 100): arrastar (computador) ou ⇅ Ordem com setas (celular). Fica salva na área pessoal do usuário. */
+function ordemCarregar(){ if(S.ordemUid===(S.uid||"")) return; S.ordemUid=S.uid||""; try{ S.ordem=JSON.parse(localStorage.getItem(LS_KEY+"-ordem-"+S.ordemUid)||"{}")||{}; }catch{ S.ordem={}; } }
+function ordemDe(g, itens){ ordemCarregar(); const o=(S.ordem||{})[g]; if(!Array.isArray(o)) return itens;
+  const pos=k=>{ const i=o.indexOf(k); return i<0?1000+itens.findIndex(x=>x[0]===k):i; }; return [...itens].sort((a,b)=>pos(a[0])-pos(b[0])); }
+async function ordemSalvar(g, keys){ ordemCarregar(); S.ordem={...(S.ordem||{})}; if(keys) S.ordem[g]=keys; else delete S.ordem[g];
+  try{ localStorage.setItem(LS_KEY+"-ordem-"+S.ordemUid, JSON.stringify(S.ordem)); }catch{}
+  render(); if(S.mode==="db" && S.uid){ try{ await S.db.doc(`data/users/${S.uid}/prefs`).set({ordem:S.ordem, em:new Date().toISOString()}); }catch{ toast("Não foi possível salvar a ordem na nuvem; ela vale neste aparelho."); } } }
+function segOrd(g, itens, act, cur, aria){
+  const ed=S.ordemEd===g, L=ordemDe(g,itens);
+  return `<span class="segwrap"><div class="seg segord ${ed?"ed":""}" role="group" aria-label="${aria}" data-og="${g}">${L.map(([k,t],i)=>`<button data-act="${ed?"ordnop":act}" data-f="${esc(k)}" data-ok="${esc(k)}" aria-pressed="${cur===k}" ${ed?"":'draggable="true" title="Arraste para mudar a ordem"'}>${ed&&i?`<span class="om" data-act="ordmv" data-g="${g}" data-k="${esc(k)}" data-d="-1" aria-label="Mover para a esquerda">◀</span>`:""}${t}${ed&&i<L.length-1?`<span class="om" data-act="ordmv" data-g="${g}" data-k="${esc(k)}" data-d="1" aria-label="Mover para a direita">▶</span>`:""}</button>`).join("")}</div>
+   <button class="btn ordbtn" data-act="ordedit" data-g="${g}" title="Mudar a ordem dos filtros (fica salva só para você)">${ed?"✓ Concluir":"⇅ Ordem"}</button>${ed&&(S.ordem||{})[g]?`<button class="btn ordbtn" data-act="ordreset" data-g="${g}">Voltar ao padrão</button>`:""}</span>`;
+}
+function ordemMover(g, k, d){ const bar=document.querySelector(`.segord[data-og="${g}"]`); if(!bar) return; const ks=[...bar.querySelectorAll("[data-ok]")].map(b=>b.dataset.ok);
+  const i=ks.indexOf(k), j=i+d; if(i<0||j<0||j>=ks.length) return; [ks[i],ks[j]]=[ks[j],ks[i]]; ordemSalvar(g, ks); }
+let ordArr=null;
+document.addEventListener("dragstart",ev=>{ const b=ev.target.closest?.(".segord [data-ok]"); if(!b) return; ordArr={g:b.closest(".segord").dataset.og,k:b.dataset.ok}; b.classList.add("arrastando"); try{ ev.dataTransfer.effectAllowed="move"; ev.dataTransfer.setData("text/plain",b.dataset.ok); }catch{} });
+document.addEventListener("dragover",ev=>{ if(!ordArr) return; const b=ev.target.closest?.(".segord [data-ok]"); if(!b||b.closest(".segord").dataset.og!==ordArr.g) return; ev.preventDefault();
+  document.querySelectorAll(".segord .alvo").forEach(x=>x!==b&&x.classList.remove("alvo")); b.classList.add("alvo"); });
+document.addEventListener("dragend",()=>{ ordArr=null; document.querySelectorAll(".segord .arrastando,.segord .alvo").forEach(x=>x.classList.remove("arrastando","alvo")); });
+document.addEventListener("drop",ev=>{ if(!ordArr) return; const b=ev.target.closest?.(".segord [data-ok]"); const a=ordArr; ordArr=null; if(!b||b.closest(".segord").dataset.og!==a.g) return; ev.preventDefault();
+  const ks=[...b.closest(".segord").querySelectorAll("[data-ok]")].map(x=>x.dataset.ok).filter(x=>x!==a.k); const r=b.getBoundingClientRect(), depois=ev.clientX>r.left+r.width/2;
+  let j=ks.indexOf(b.dataset.ok); if(b.dataset.ok===a.k) return; ks.splice(depois?j+1:j,0,a.k); ordemSalvar(a.g, ks); toast("Ordem dos filtros salva."); });
 const DIL_TABS=[["sempedido","Sem pedido"],["nao","Não entregue"],["parcial","Entregue parcial"],["entregue","Entregue"],["restr","Com restrição"],["vencida","Remessa vencida"],["bloq","PR bloqueada"],["sempr","Itens sem PR"],["todas","Todas"]];
 /* Entrega com restrição (nota 083): material entregue, retido no almoxarifado até resolver NF/pedido */
 const RESTR={financeiro:"Financeiro", suprimentos:"Suprimentos", logistica:"Logística"};
@@ -1105,9 +1136,7 @@ function viewDilig(){
   const base=S.rms.filter(r=>!isNeg(r.id)&&!foraSup(r.id));
   const l=dilList(), pg=paginar("dil", l, S.dilFilter+"|"+S.dilQ+"|"+JSON.stringify(S.dilSort||null));
   return `<div class="head"><div><h2>Diligenciamento</h2><p>Acompanhe PR, pedidos, fornecedores, notas fiscais e entregas item a item. O solicitante vê apenas o nº do pedido e o status.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="xlsx">⤓ Baixar planilha (XLSX)</button><a class="btn" href="#indicadores">Ver indicadores</a></div></div>
-  <section class="panel"><header><div class="seg" role="group" aria-label="Situação">
-    ${DIL_TABS.map(([k,t])=>`<button data-act="dilf" data-f="${k}" aria-pressed="${S.dilFilter===k}">${t} (${base.filter(r=>dilMatch(r,k)).length})</button>`).join("")}
-  </div><input id="dilQ" class="search" type="search" placeholder="Buscar RMS, pedido, fornecedor, NF…" value="${esc(S.dilQ)}" aria-label="Buscar"></header>
+  <section class="panel"><header>${segOrd("dil",DIL_TABS.map(([k,t])=>[k,`${t} (${base.filter(r=>dilMatch(r,k)).length})`]),"dilf",S.dilFilter,"Situação")}<input id="dilQ" class="search" type="search" placeholder="Buscar RMS, pedido, fornecedor, NF…" value="${esc(S.dilQ)}" aria-label="Buscar"></header>
   ${loadingOr(!l.length?`<div class="empty">Nenhuma RMS nesta situação.</div>`:`<div class="tw"><table class="dil"><colgroup><col style="width:140px"><col style="width:112px"><col style="width:150px"><col style="width:180px"><col style="width:100px"><col style="width:112px"><col style="width:150px"><col style="width:96px"><col style="width:92px"><col style="width:68px"><col style="width:80px"><col style="width:80px"><col style="width:136px"><col style="width:132px"><col style="width:112px"></colgroup>
   <thead><tr>${sth("rms","Nº RMS")}${sth("prioridade","Prioridade")}${sth("solicitante","Solicitante")}${sth("itens","Itens")}${sth("pr","PR")}${sth("pedido","Pedido")}${sth("fornecedor","Fornecedor")}${sth("remessa","Remessa")}<th>Nota fiscal</th><th class="r">Qtd total</th><th class="r">Qtd entregue</th>${sth("pendente","Qtd pendente","r")}${sth("entrega","Entrega")}<th>Entrega com restrição</th><th></th></tr></thead><tbody>
   ${pg.items.map(r=>{ const sx=S.status[r.id]||{}, dg=S.dilig[r.id]||{}, e=entregaOf(r), id=esc(r.id), its=r.itens||[], peds=pedidosOf(r), rd=proxRemessa(r), ven=vencida(r);
@@ -2295,6 +2324,7 @@ function supaDb(sb){
   };
 }
 function assinarDados(db, onR, onS){
+  if(S.uid) try{ db.doc(`data/users/${S.uid}/prefs`).onSnapshot(d=>{ const o=d.exists&&d.data().ordem; if(o&&typeof o==="object"){ ordemCarregar(); S.ordem=o; try{ localStorage.setItem(LS_KEY+"-ordem-"+S.ordemUid, JSON.stringify(o)); }catch{} softRender(); } }, ()=>{}); }catch{}
   if(S.uid) try{ db.doc(`data/users/${S.uid}/notif`).onSnapshot(d=>{ S.vistos=new Set((d.exists&&d.data().vistos)||[]); S.supDesde=(d.exists&&d.data().supDesde)||S.supDesde||null; S.vistosOk=true; softRender(); }, ()=>{ S.vistosOk=true; }); }catch{ S.vistosOk=true; }
   db.collection("rms").limit(1000).onSnapshot(snap=>{ S.rms=snap.docs.map(d=>({...d.data(), id:d.id})); onR&&onR(); softRender(); }, e=>toast("Falha ao atualizar a lista: "+(e?.message||e?.code||"")));
   db.collection("status").limit(1000).onSnapshot(snap=>{ const m={}; snap.docs.forEach(d=>m[d.id]=d.data()); S.status=m; onS&&onS(); softRender(); }, ()=>{ onS&&onS(); });
@@ -3067,7 +3097,7 @@ function renderDrawer(){
 /* ---------- Perfil Consulta: só visualização (nota 082) ----------
    Ações liberadas: navegar, filtrar, ordenar, abrir/fechar, copiar, exportar. Todo o resto é barrado aqui
    (e também no banco, pela regra do Supabase). */
-const CONSULTA_OK=new Set(["drtab","bell","bellver","pushpainel","pushfechar","pushativ","pushdesl","pushteste","open","close","okclose","dilclose","almtab","bell","clear","colall","colclose","colf","colnone","colx","colxall","copy","dilf","dsort","filter","indclear","indgo","indpdf","indper","ini","iniopen","kfilter","lgsair","lgver","ltinv","ltmed","ltsel","minf","notifok","notifver","pg","snall","snok","snopen","supf","xlsx"]);
+const CONSULTA_OK=new Set(["drtab","ordedit","ordmv","ordreset","ordnop","bell","bellver","pushpainel","pushfechar","pushativ","pushdesl","pushteste","open","close","okclose","dilclose","almtab","bell","clear","colall","colclose","colf","colnone","colx","colxall","copy","dilf","dsort","filter","indclear","indgo","indpdf","indper","ini","iniopen","kfilter","lgsair","lgver","ltinv","ltmed","ltsel","minf","notifok","notifver","pg","snall","snok","snopen","supf","xlsx"]);
 document.addEventListener("click",ev=>{
   if(!S.consulta) return; const t=ev.target.closest("[data-act]"); if(!t) return;
   if(CONSULTA_OK.has(t.dataset.act)) return;
@@ -3083,6 +3113,9 @@ document.addEventListener("click",async ev=>{
   if(a==="close" && t.classList.contains("overlay") && ev.target!==t) return;
   if(a==="open"){ S.openId=t.dataset.id; renderDrawer(); }
   else if(a==="drtab"){ drTab(t.dataset.k); }
+  else if(a==="ordedit"){ S.ordemEd = S.ordemEd===t.dataset.g ? null : t.dataset.g; render(); if(!S.ordemEd) toast("Ordem dos filtros salva."); }
+  else if(a==="ordmv"){ ordemMover(t.dataset.g, t.dataset.k, +t.dataset.d); }
+  else if(a==="ordreset"){ ordemSalvar(t.dataset.g, null); toast("Filtros voltaram à ordem padrão."); }
   else if(a==="okclose"){ S.lastSent=null; render(); }
   else if(a==="avisar"){ S.justSent=t.dataset.id; S.openId=t.dataset.id; renderDrawer(); }
   else if(a==="close"){ S.openId=null; S.justSent=null; renderDrawer(); }
